@@ -1,0 +1,5 @@
+- [Primer on Python Decorators](https://realpython.com/primer-on-python-decorators/) by Geir Arne Hjelle  Aug 22, 2018 
+- [Bread crumbs open courseware homework/CS212-1-2-best_wild_hand.py](https://github.com/russkel/opencourseware_homework/blob/master/CS212-1-2-best_wild_hand.py)
+- [github: zkid18/deco.py](https://gist.github.com/zkid18/013aab9d796561a3997fbec77ae6990a)
+- [Python Decorator Library](https://wiki.python.org/moin/PythonDecoratorLibrary)
+- [12 декораторов Python, которые улучшают код](https://nuancesprog.ru/p/17759/)
