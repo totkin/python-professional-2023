@@ -87,10 +87,16 @@ def flush(hand: list) -> bool:
     return result == 1
 
 
-def straight(ranks):
+def straight(ranks: list) -> bool:
     """Возвращает True, если отсортированные ранги формируют последовательность 5ти,
     где у 5ти карт ранги идут по порядку (стрит)"""
-    return
+    set_ranks = list(set(ranks))
+    if len(set_ranks) < 5:
+        return False
+    elif set_ranks[4] - set_ranks[2] > 2:
+        return False
+
+    return result == 5
 
 
 def kind(n, ranks):
@@ -142,7 +148,9 @@ def card_map(t: str) -> list:
 
 
 if __name__ == '__main__':
-    test_list = "AC 7C 8C 9C TC 5C ?B".split()
+    test_list = "6C 7C 8C 9C TC 5C JS".split()
     print(card_ranks(test_list))
+    print(straight(card_ranks(test_list)))
+
     # test_best_hand()
     # test_best_wild_hand()
