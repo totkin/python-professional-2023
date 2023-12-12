@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import collections
+from functools import wraps
 
 # -----------------
 # Реализуйте функцию best_hand, которая принимает на вход
@@ -27,6 +29,25 @@
 # Можно свободно определять свои функции и т.п.
 # -----------------
 
+Card = collections.namedtuple('Card', ['rank', 'suit'])
+
+
+class Hand:
+    def __int__(self, hand: list):
+        self._cards = [Card('?-23456789TJQKA'.index(str(h[:-1])), h[-1]) for h in hand]
+
+
+def modif_cards(func):
+    @wraps(func)
+    def wrapper(hand: list):
+        hand_new = [
+            ['?-23456789TJQKA'.index(str(h[:-1])) for h in hand],
+            [h[-1] for h in hand],
+        ]
+        return func(hand_new)
+
+    return wrapper
+
 
 def hand_rank(hand):
     """Возвращает значение определяющее ранг 'руки'"""
@@ -51,15 +72,19 @@ def hand_rank(hand):
         return (0, ranks)
 
 
-def card_ranks(hand):
+@modif_cards
+def card_ranks(hand: list) -> list:
     """Возвращает список рангов (его числовой эквивалент),
     отсортированный от большего к меньшему"""
-    return
+    result = sorted(hand[0], reverse=True)
+    return result
 
 
-def flush(hand):
+@modif_cards
+def flush(hand: list) -> bool:
     """Возвращает True, если все карты одной масти"""
-    return
+    result = len(set(hand[1]))
+    return result == 1
 
 
 def straight(ranks):
@@ -111,6 +136,13 @@ def test_best_wild_hand():
             == ['7C', '7D', '7H', '7S', 'JD'])
     print('OK')
 
+
+def card_map(t: str) -> list:
+    return [t[:-1], t[-1]]
+
+
 if __name__ == '__main__':
-    test_best_hand()
-    test_best_wild_hand()
+    test_list = "AC 7C 8C 9C TC 5C ?B".split()
+    print(card_ranks(test_list))
+    # test_best_hand()
+    # test_best_wild_hand()
