@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import collections
 from functools import wraps
+from itertools import combinations
 
 # -----------------
 # Реализуйте функцию best_hand, которая принимает на вход
@@ -95,7 +96,7 @@ def straight(ranks: list) -> bool:
         return False
     elif set_ranks[4] - set_ranks[2] > 2:
         return False
-
+    result = 1
     return result == 5
 
 
@@ -113,7 +114,12 @@ def two_pair(ranks):
 
 def best_hand(hand):
     """Из "руки" в 7 карт возвращает лучшую "руку" в 5 карт """
-    return
+    target = []
+    sample_five_rank = 0
+    for sample_five in combinations(hand, 5):
+        if sample_five_rank < hand_rank(sample_five):
+            target = sample_five
+    return target
 
 
 def best_wild_hand(hand):
@@ -151,6 +157,8 @@ if __name__ == '__main__':
     test_list = "6C 7C 8C 9C TC 5C JS".split()
     print(card_ranks(test_list))
     print(straight(card_ranks(test_list)))
+
+    print(sorted(((1, 'csv'), (2, 'csv'), (0, 'csv'),), reverse=True))
 
     # test_best_hand()
     # test_best_wild_hand()
