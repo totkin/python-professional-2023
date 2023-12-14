@@ -22,5 +22,6 @@
 #### По заданиям
 - [github: zkid18/deco.py](https://gist.github.com/zkid18/013aab9d796561a3997fbec77ae6990a)
 - [Bread crumbs open courseware homework/CS212-1-2-best_wild_hand.py](https://github.com/russkel/opencourseware_homework/blob/master/CS212-1-2-best_wild_hand.py)
-- []()
+- [log-analyzer](https://github.com/morenovj/python-log-analyzer/blob/main/log-analyzer.py) github wild
+- [otus log-analyzer](https://gitlab.com/otus-learning/log-analyzer) native otus
 
