@@ -19,7 +19,8 @@ config_default = {
     'REPORT_DIR': './reports',
     'LOG_DIR': './log',
     'PARSING_ERROR_LIMIT': 20,
-    'TEMPLATE_REPORT_PATH': './report_template.html'
+    'TEMPLATE_REPORT_PATH': './report_template.html',
+    'LOG_FILE_APP_PATH': './',
 }
 
 LogFile = namedtuple('LogFile', ['path', 'file_date'])

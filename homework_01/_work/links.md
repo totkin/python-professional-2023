@@ -9,14 +9,17 @@
 - [12 декораторов Python, которые улучшают код](https://nuancesprog.ru/p/17759/)
 - [Python декораторы на максималках](https://habr.com/ru/articles/750312/) habr Propan671 25 июл 2023 в 20:02
   - ретраи - [tenacity](https://tenacity.readthedocs.io/en/latest/)
-  - логирование ошибок - [loguru](https://loguru.readthedocs.io/en/stable/overview.html)
+ 
   - сериализация входящих данных - [FastDepends](https://github.com/Lancetnik/FastDepends)
 
 <hr>
 
-#### itertools
-- [itertools — Functions creating iterators for efficient looping](https://docs.python.org/3/library/itertools.html#itertools-recipes) python.org **Itertools Recipes**
-
+#### Доп модули, пакеты, ресурсы
+- [itertools](https://docs.python.org/3/library/itertools.html#itertools-recipes) Functions creating iterators for efficient looping python.org **Itertools Recipes**
+- [argparse.py](https://jenyay.net/Programming/Argparse) Разбор параметров командной строки в Python
+- [argparse.py](https://docs.python.org/3/library/argparse.html) Официальная документация
+- 
+- [loguru](https://loguru.readthedocs.io/en/stable/overview.html) логирование ошибок
 <hr>
 
 #### По заданиям
