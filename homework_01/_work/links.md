@@ -18,7 +18,7 @@
 - [itertools](https://docs.python.org/3/library/itertools.html#itertools-recipes) Functions creating iterators for efficient looping python.org **Itertools Recipes**
 - [argparse.py](https://jenyay.net/Programming/Argparse) Разбор параметров командной строки в Python
 - [argparse.py](https://docs.python.org/3/library/argparse.html) Официальная документация
-- 
+- [logging](https://docs.python.org/3/library/logging.html) Официальная документация
 - [loguru](https://loguru.readthedocs.io/en/stable/overview.html) логирование ошибок
 <hr>
 
