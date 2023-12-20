@@ -73,6 +73,7 @@ def create_parser() -> ArgumentParser:
 
 
 def log_init():
+
     # Нормальный режим
     if not config_local.get("APP_DEBUG"):
         loc_file_path = config.get('APP_LOG_FILE_PATH')
