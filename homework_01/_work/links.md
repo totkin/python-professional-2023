@@ -4,12 +4,17 @@
 <hr>
 
 #### Декораторы
+- tirinox.ru
+  - Просто объяснение и примеры [@wraps(f)](https://tirinox.ru/python-decorators/) 14 октября, 2019
+  - Декораторы с  [параметрами](https://tirinox.ru/parametric-decorator/) 16 октября, 2019
+  - [Полезные](https://tirinox.ru/useful-decorators/) декораторы. 28 октября, 2019
+    - Awesome Python Decorator [github](https://github.com/lord63/awesome-python-decorator)
+- принцип работы  @wraps(func) [шаг за шагом](https://ru.stackoverflow.com/questions/1264129/Обьясните-как-работает-wrapsfunc-детально-пжл) stackoverflow.com
 - [Primer on Python Decorators](https://realpython.com/primer-on-python-decorators/) by Geir Arne Hjelle  Aug 22, 2018 
 - [Python Decorator Library](https://wiki.python.org/moin/PythonDecoratorLibrary)
 - [12 декораторов Python, которые улучшают код](https://nuancesprog.ru/p/17759/)
 - [Python декораторы на максималках](https://habr.com/ru/articles/750312/) habr Propan671 25 июл 2023 в 20:02
-  - ретраи - [tenacity](https://tenacity.readthedocs.io/en/latest/)
- 
+  - ретраи - [tenacity](https://tenacity.readthedocs.io/en/latest/) 
   - сериализация входящих данных - [FastDepends](https://github.com/Lancetnik/FastDepends)
 
 <hr>

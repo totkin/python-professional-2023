@@ -7,6 +7,7 @@ import os.path
 import sys
 import typing
 from argparse import ArgumentParser, FileType
+from functools import wraps
 
 # log_format ui_short '$remote_addr  $remote_user $http_x_real_ip [$time_local] "$request" '
 #                     '$status $body_bytes_sent "$http_referer" '
@@ -32,6 +33,26 @@ config_local = {
 }
 
 
+def debug_log(func):
+    @wraps(func)
+    def wrapper_debug(*args, **kwargs):
+
+        if config_local.get("APP_DEBUG"):
+            args_repr = [repr(a) for a in args]
+            kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]
+            signature = ", ".join(args_repr + kwargs_repr)
+            logging.info(f"Calling {func.__name__}({signature})")
+
+        value = func(*args, **kwargs)
+
+        if config_local.get("APP_DEBUG"):
+            logging.info(f"{func.__name__!r} returned {value!r}")
+
+        return value
+
+    return wrapper_debug
+
+
 class WorkFile:
     """
     # {"обрабатываем":"", "имя файла":"", "время прошлой обработки":"", "результат прошлой обработки":""}
@@ -54,7 +75,7 @@ class WorkFile:
             self.LAST_PROCESSING_QUALITY: float = 1.0
 
     def __str__(self, ):
-        return json.dumps(self, default=lambda o: o.__dict__)
+        return json.dumps(self, default=lambda _: _.__dict__)
 
     def __repr__(self, ):
         return self.__str__()
@@ -75,6 +96,7 @@ class WorkFile:
         return
 
 
+@debug_log
 def first_description_print() -> None:
     """
     вывод информации при запуске
