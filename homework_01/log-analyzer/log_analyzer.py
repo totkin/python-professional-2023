@@ -71,14 +71,6 @@ class LogFile:
     status_text: str = ""
 
 
-# Report data
-# count      - сĸольĸо раз встречается URL, абсолютное значение
-# count_perc - сĸольĸо раз встречается URL, в процентах относительно общего числа запросов
-# time_sum   - суммарный $request_time для данного URL'а, абсолютное значение
-# time_perc  - суммарный $request_time для данного URL'а, в процентах относительно общего $request_time всех запросов
-# time_avg   - средний $request_time для данного URL'а
-# time_max   - маĸсимальный $request_time для данного URL'а
-# time_med   - медиана $request_time для данного URL'а
 
 
 def create_parser(current_config: dict) -> ArgumentParser:
@@ -281,6 +273,7 @@ def read_file(log_file: LogFile, current_config: dict, ):
 
 
 def parse_file(rows, current_config: dict, ) -> dict | None:
+    """Чтение данных из файла с логами"""
     error_limit_percent = current_config.get('app_parsing_error_limit_percent')
     line_format = current_config.get('app_line_regex_template')
 
@@ -319,7 +312,19 @@ def save_file_last_start(current_config: dict):
     pass
 
 
-def get_report_data(data_dict: dict) -> list:
+def get_report_data(data_dict: dict,) -> list:
+    """ На основе считанных данных, готовится выходной массив информации
+
+        # Report data
+        # count      - сĸольĸо раз встречается URL, абсолютное значение
+        # count_perc - сĸольĸо раз встречается URL, в процентах относительно общего числа запросов
+        # time_sum   - суммарный $request_time для данного URL'а, абсолютное значение
+        # time_perc  - суммарный $request_time для данного URL'а, в процентах относительно
+                       общего $request_time всех запросов
+        # time_avg   - средний $request_time для данного URL'а
+        # time_max   - маĸсимальный $request_time для данного URL'а
+        # time_med   - медиана $request_time для данного URL'а
+    """
     resp_time_sum = 0
     count_all: int = 0
     for i in data_dict.values():
@@ -351,7 +356,7 @@ def get_report_data(data_dict: dict) -> list:
     return result
 
 
-def rendering_report(data: list, report_path: str, current_config: dict, ) -> None:
+def make_report(data: list, report_path: str, current_config: dict, ) -> None:
     report_size = current_config.get('REPORT_SIZE')
     report_dir = current_config.get('REPORT_DIR')
     template_path = current_config.get('app_template_report_path')
@@ -378,7 +383,7 @@ def main(current_config: dict):
         rep_data: list = get_report_data(raw_data)
 
         report_file: str = get_report_name(current_config, log_file)
-        rendering_report(data=rep_data, report_path=report_file, current_config=current_config)
+        make_report(data=rep_data, report_path=report_file, current_config=current_config)
 
 
 if __name__ == '__main__':
