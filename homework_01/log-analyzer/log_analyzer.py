@@ -1,206 +1,400 @@
 import gzip
 import json
 import logging
-import operator
 import os
 import re
-import shutil
-import tempfile
-import typing
-from argparse import ArgumentParser
-from collections import namedtuple
-from datetime import datetime
+import sys
+from argparse import ArgumentParser, FileType
+from dataclasses import dataclass
+from datetime import datetime, date
 from decimal import Decimal
+from operator import itemgetter
 from statistics import mean, median
 from string import Template
 
-config_default = {
+config = {
     'REPORT_SIZE': 1000,
-    'reports': './reports',
-    'log-analyzer': './log-analyzer',
-    'PARSING_ERROR_LIMIT': 20,
-    'TEMPLATE_REPORT_PATH': './report_template.html',
-    'LOG_FILE_APP_PATH': './log_file.log',
+    'REPORT_DIR': './reports',
+    'LOG_DIR': './log-analyzer',
+    'app_config_default_path': './resources/config.json',  # Стандартный путь расположения config
+
+    'APP_NAME': os.path.basename(sys.argv[0]).replace('.py', ''),
+    'APP_VERSION': '0.1.20240105',
+
+    'app_debug': True,  # Режим отладки. True == режим отладки, False == нормальный режим.
+    'app_debug_log_file_path': "./resources/debug_log_file.log",  # Файл лога режима отладки
+
+    'app_parsing_error_limit_percent': 20,
+    'app_template_report_path': './resources/report_template.html',
+    'app_log_file_app_path': './resources/log_file.log',
+    # Паттерн для поиска файлов логов
+    'app_file_regex_template': re.compile(
+        r'nginx-access-ui\.log-(?P<filename_date>\d{8})\.(?P<file_extension>[0-9a-z]+$)', re.IGNORECASE),
+    # Допустимые расширения файла логов : функция для работы с файлом
+    'app_correct_log_files_extensions': {'gz': gzip.open,
+                                         'txt': open,
+                                         },
+    # Информация о последнем запуске программы
+    'app_file_last_start': "./resources/last_effective_start.json",
+    # Паттерн для чтения строк
+    # log_format ui_short '$remote_addr  $remote_user $http_x_real_ip [$time_local] "$request" '
+    #                     '$status $body_bytes_sent "$http_referer" '
+    #                     '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
+    #                     '$request_time';
+    'app_line_regex_template':
+        re.compile(
+            ''
+            + r'(?P<remote_addr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) '
+            + r'(?P<remote_user>.+?)  '
+            + r'(?P<http_x_real_ip>[0-9a-z]+|-) '
+            + r'\[(?P<time_local>\d{2}\/[A-Za-z]{3}\/\d{4}:\d{2}:\d{2}:\d{2} (\+|\-)\d{4})\] '
+            + r'\"(?P<request>.+?)\" '
+            + r'(?P<status>\d{1,3}) '
+            + r'(?P<body_bytes_sent>\d{1,}) '
+            + r'\"(?P<http_referer>.+?)\" '
+            + r'\"(?P<http_user_agent>.+?)\" '
+            + r'\"(?P<http_x_forwarded_for>.+?)\" '
+            + r'\"(?P<http_X_REQUEST_ID>.+?)\" '
+            + r'\"(?P<http_X_RB_USER>.+?)\" '
+            + r'(?P<request_time>\d+\.\d+)',
+            re.IGNORECASE),
+    'app_encoding': 'UTF-8',
 }
 
-LogFile = namedtuple('LogFile', ['path', 'file_date'])
+
+@dataclass
+class LogFile:
+    path: str = ""
+    extension: str = ""
+    date: date = datetime.strptime('19700101', "%Y%d%m").date()
+    status: bool = False,
+    status_text: str = ""
 
 
-def get_latest_log(logs_path: str) -> typing.Union[LogFile, None]:
-    if not os.path.exists(logs_path):
-        return
-
-    file_name_template = re.compile(r"""nginx-access-ui\.log-(?P<log_date>\d{8})(\.gz$|$)""", re.IGNORECASE)
-    logging.info(file_name_template)
-    latest_log = None
-    for path in os.listdir(logs_path):
-        file_log = re.search(file_name_template, path)
-
-        if not file_log or os.path.isdir(path):
-            continue
-
-        file_name_data = file_log.groupdict()
-        try:
-            file_date = datetime.strptime(file_name_data['log_date'], '%Y%m%d').date()
-        except ValueError:
-            continue
-
-        if not latest_log or latest_log.file_date < file_date:
-            latest_log = LogFile(path=os.path.join(logs_path, path), file_date=file_date)
-
-    return latest_log
+# Report data
+# count      - сĸольĸо раз встречается URL, абсолютное значение
+# count_perc - сĸольĸо раз встречается URL, в процентах относительно общего числа запросов
+# time_sum   - суммарный $request_time для данного URL'а, абсолютное значение
+# time_perc  - суммарный $request_time для данного URL'а, в процентах относительно общего $request_time всех запросов
+# time_avg   - средний $request_time для данного URL'а
+# time_max   - маĸсимальный $request_time для данного URL'а
+# time_med   - медиана $request_time для данного URL'а
 
 
-def get_log_lines(log_path: str):
-    opener = gzip.open if log_path.endswith('.gz') else open
-    log_file = opener(log_path, "rt")
-    for line in log_file:
-        yield line
-    log_file.close()
+def create_parser(current_config: dict) -> ArgumentParser:
+    """
+    обработка аргументов и консольного запуска
+    :return: ArgumentParser
+    """
+    loc_prog_name = current_config.get('APP_NAME')
+    loc_prog_version = current_config.get('APP_VERSION')
+    loc_config_path = current_config.get('app_config_default_path')
+    loc_config_debug_mode = current_config.get('app_debug')
 
-
-def parse_log(lines, error_limit: int) -> typing.Union[typing.Dict, None]:
-    line_format = re.compile(
-        r"""- \[(?P<dateandtime>\d{2}\/[a-z]{3}\/\d{4}:\d{2}:\d{2}:\d{2} (\+|\-)\d{4})\] ((\"[A-Z]+ )(?P<url>.+)(http\/\d+\.\d+")) (?P<statuscode>\d{3}) (?P<bytessent>\d+) (["](?P<refferer>(\-)|(.+))["]) (["](?P<useragent>.+)["]) (?P<request_time>\d+\.\d+)""",
-        # noqa E501
-        re.IGNORECASE
+    parser: ArgumentParser = ArgumentParser(
+        description=f'{loc_prog_name} - анализатор логов. Создан в рамках ДЗ-01 учебной программы OTUS.',
+        epilog='(c) T for Otus 2023. Применение ограничено рамками учебной задачи.',
+        add_help=False,
     )
+    arg_group = parser.add_argument_group(title='Параметры')
+
+    arg_group.add_argument('-c', '--config',
+                           # type=FileType(),
+                           metavar='',
+                           help=f'Файл конфигурации. По-умолчанию это {loc_config_path}',
+                           default=loc_config_path,
+                           )
+    arg_group.add_argument('-v', '--version',
+                           action='version',
+                           help='Номер версии',
+                           version=f'{loc_prog_name} v.{loc_prog_version}')
+    arg_group.add_argument('-d', '--debug',
+                           type=FileType(),
+                           metavar='',
+                           help=f'Проверка отключения debug-режима {loc_config_debug_mode}',
+                           default=loc_config_debug_mode,
+                           )
+    arg_group.add_argument('-h', '--help', action='help', help='Справка')
+
+    return parser
+
+
+def first_description_print(current_config: dict) -> None:
+    """
+    вывод информации при запуске
+    """
+    loc_prog_name = current_config.get('APP_NAME')
+    loc_prog_version = current_config.get('APP_VERSION')
+
+    print(f'{loc_prog_name} v.{loc_prog_version}',
+          '- анализатор логов. Создан в рамках ДЗ-01 учебной программы OTUS.')
+    return
+
+
+def log_init(current_config: dict) -> None:
+    """
+    Инициализация logging - для DEBUG и NORMAL режимов работы
+    :return: None
+    """
+    app_debug = current_config.get('app_debug')
+    encoding = current_config.get('app_encoding')
+
+    # NORMAL mode
+
+    if not app_debug:
+        loc_file_path = current_config.get('app_log_file_app_path')
+        loc_str = '[%(asctime)s] %(levelname).1s %(message)s'
+        logging.basicConfig(
+            filename=loc_file_path,
+            level=logging.INFO,
+            format=loc_str,
+            datefmt='%Y.%m.%d %H:%M:%S',
+            encoding=encoding,
+        )
+
+    # DEBUG mode
+    else:
+        loc_file_path = current_config.get('app_debug_log_file_path')
+        loc_dir_path = os.path.dirname(loc_file_path)
+        os.makedirs(loc_dir_path, exist_ok=True)
+
+        loc_str = "%(asctime)s ; [%(levelname)s] ; %(funcName)s ; %(lineno)d ; %(message)s"
+        logging.basicConfig(
+            filename=loc_file_path,
+            level=logging.INFO,
+            format=loc_str,
+            datefmt='%Y.%m.%d %H:%M:%S',
+            filemode="w",
+            encoding=encoding,
+        )
+        logging.info("Log start")
+
+    return
+
+
+def make_empty_config(config_path):
+    json_object: dict = {}
+    with open(config_path, 'w') as f:
+        json.dump(json_object, f)
+
+
+def get_config(config_path: str, local_config: dict) -> dict:
+    app_debug = local_config.get('app_debug')
+    encoding = local_config.get('app_encoding')
+
+    if not os.path.exists(config_path):
+        if app_debug:
+            logging.warning("Не существует файла конфигурации")
+
+        make_empty_config(config_path)
+
+    with open(config_path, 'r', encoding=encoding) as loc_file:
+        config_extra = json.load(loc_file)
+
+    # Python 3.9^ -> 'result = config | config_extra' или 'result | = config_extra' - второй у меня не сработал
+    if sys.version_info <= (3, 9):
+        result = {**local_config, **config_extra}
+    else:
+        result = local_config | config_extra
+
+    if app_debug:
+        logging.info(result)
+
+    return result
+
+
+def duple_info(str_info: str):
+    # print(str_info)
+    logging.info(str_info)
+
+
+def get_log_file_candidate(current_config: dict) -> LogFile:
+    result_file = LogFile()
+    file_regex_template = current_config.get('app_file_regex_template')
+    logs_dir = current_config.get('LOG_DIR')
+    correct_log_files_extensions = list(current_config.get('app_correct_log_files_extensions').keys())
+
+    if os.path.exists(logs_dir):
+        for file in os.listdir(logs_dir):
+            if not os.path.isdir(file):
+                file_log = re.search(file_regex_template, file)
+                if file_log:
+                    file_dict = file_log.groupdict()
+                    try:
+                        file_date = datetime.strptime(file_dict['filename_date'], '%Y%m%d').date()
+                        file_extension = file_dict['file_extension']
+                    except ValueError:
+                        logging.exception(ValueError)
+                        continue
+
+                    if file_date > result_file.date and file_extension in correct_log_files_extensions:
+                        try:
+                            result_file = LogFile(path=os.path.join(logs_dir, file),
+                                                  extension=file_dict['file_extension'],
+                                                  date=file_date,
+                                                  status=True)
+                        except Exception:
+                            logging.exception(Exception)
+    else:
+        duple_info(f'Папки с логами {logs_dir} не существует.')
+        return result_file
+
+    if result_file.path == '':
+        duple_info(f"Нет файлов логов в папке {logs_dir} с допустимыми расширениями {correct_log_files_extensions}")
+    else:
+        duple_info(f"Найден файл-кандидат на обработку {result_file.path}")
+        result_file = check_log_file_candidate(current_config, result_file)
+
+    return result_file
+
+
+def check_log_file_candidate(current_config: dict, result_file: LogFile) -> LogFile:
+    filename = current_config.get('app_file_last_start')
+    encoding = current_config.get('app_encoding')
+    if os.path.exists(filename):
+        with open(filename, 'r', encoding=encoding) as loc_file:
+            conditions = json.load(loc_file)
+    if result_file.path == conditions.get('path'):
+        if conditions.get('status'):
+            duple_info(f'Файл уже был успешно обработан ранее: {conditions}')
+            result_file = LogFile()
+    return result_file
+
+
+def get_report_name(current_config: dict, log_file: LogFile) -> str:
+    report_dir = current_config.get('REPORT_DIR')
+    report_name = f"report-{log_file.date.strftime('%Y.%m.%d')}.html"
+    report_path: str = os.path.join(report_dir, report_name)
+    if os.path.exists(report_path):
+        duple_info(f'Файл с отчетом {report_path} уже существует и будет перезаписан.')
+    return report_path
+
+
+def read_file(log_file: LogFile, current_config: dict, ):
+    correct_log_files_extensions: dict = current_config.get('app_correct_log_files_extensions')
+    open_with = correct_log_files_extensions.get(log_file.extension)
+    _encoding = current_config.get('app_encoding')
+
+    file = open_with(log_file.path, mode='rt', encoding=_encoding)
+    for _ in file: yield _
+    file.close()
+
+
+def parse_file(rows, current_config: dict, ) -> dict | None:
+    error_limit_percent = current_config.get('app_parsing_error_limit_percent')
+    line_format = current_config.get('app_line_regex_template')
 
     count_lines: int = 0
     count_error: int = 0
 
     result = {}
-    for line in lines:
+
+    for row in rows:
         count_lines += 1
-        line_data = re.search(line_format, line)
+        line_data = re.search(line_format, row)
 
         if not line_data:
             count_error += 1
-            continue
-
-        datadict = line_data.groupdict()
-        url = datadict["url"]
-        request_time = Decimal(datadict["request_time"])
-
-        if url in result:
-            result[url].append(request_time)
         else:
-            result[url] = [request_time]
+            datadict = line_data.groupdict()
 
-    check_parsing_result = (count_error / count_lines) * 100 < error_limit
+            remote_addr = datadict['remote_addr']
+            request_time = datadict['request_time']
+
+            if not remote_addr in result:
+                result[remote_addr] = []
+            result[remote_addr].append(Decimal(request_time))
+
+    check_parsing_result = (count_error / count_lines) * 100 < error_limit_percent
     if check_parsing_result:
+        logging.info(f'Обработано строк:{count_lines}. Ошибок: {count_error}')
         return result
     else:
-        raise RuntimeError(f'The threshold value for the number {error_limit} of parsing errors has been exceeded')
+        logging.info(f'Обработано строк:{count_lines}. Ошибок: {count_error}')
+        raise RuntimeError(f'Кол-во ошибок при парсинге лога превысило установленный порог в {error_limit_percent} %')
 
 
-def calc_report_data(data: typing.Dict) -> typing.List:
-    count_all: int = len(data)
+def save_file_last_start(current_config: dict):
+    """ Нужно как-то сохранить результаты операций """
+    pass
 
-    resp_time_sum = Decimal(0)
-    for i in data.values():
+
+def get_report_data(data_dict: dict) -> list:
+    resp_time_sum = 0
+    count_all: int = 0
+    for i in data_dict.values():
         resp_time_sum += sum(i)
+        count_all += len(i)
 
     result = []
-    for k, v in data.items():
+    for u, v in data_dict.items():
         count_url = len(v)
+        count_perc = count_url / count_all * 100
         resp_time_sum_url = sum(v)
+        time_perc = resp_time_sum_url / resp_time_sum * 100
+
         result.append(
             {
-                'url': k,
-                'count': count_url,
-                'count_perc': Decimal(
-                    count_url / count_all * 100
-                ).quantize(Decimal('1.111')),
-                'time_sum': resp_time_sum_url,
-                'time_perc': Decimal(
-                    resp_time_sum_url / resp_time_sum * 100
-                ).quantize(Decimal('1.111')),
-                'time_avg': Decimal(mean(v)).quantize(Decimal('1.111')),
-                'time_max': max(v),
-                'time_med': median(v)
+                'url': u,
+                '(1) count': count_url,
+                '(2) count_perc': Decimal(count_perc).quantize(Decimal('1.00')),
+                '(3) time_sum': Decimal(resp_time_sum_url).quantize(Decimal('1.')),
+                '(4) time_perc': Decimal(time_perc).quantize(Decimal('1.00')),
+                '(5) time_avg': Decimal(mean(v)).quantize(Decimal('1.000')),
+                '(6) time_max': Decimal(max(v)).quantize(Decimal('1.000')),
+                '(7) time_med': Decimal(median(v)).quantize(Decimal('1.000')),
             }
         )
 
-    result.sort(key=operator.itemgetter('time_sum'), reverse=True)
+    logging.info(f'Общее число url в логе:{len(result)}')
+    result.sort(key=itemgetter('(3) time_sum'), reverse=True)
     return result
 
 
-def rendering_report(data: typing.List, template_path: str, report_path: str, size: int) -> None:
-    with open(template_path, 'r') as t:
+def rendering_report(data: list, report_path: str, current_config: dict, ) -> None:
+    report_size = current_config.get('REPORT_SIZE')
+    report_dir = current_config.get('REPORT_DIR')
+    template_path = current_config.get('app_template_report_path')
+    encoding = current_config.get('app_encoding')
+
+    with open(template_path, 'r', encoding=encoding) as t:
         template = Template(t.read())
 
-    report = template.safe_substitute(table_json=json.dumps(data[:size], default=str))
+    report = template.safe_substitute(target_data=json.dumps(data[:report_size], default=str, sort_keys=False))
 
-    temp_report_path = tempfile.mkstemp()[1]
-    with open(temp_report_path, 'w') as r:
+    os.makedirs(report_dir, exist_ok=True)
+    with open(report_path, 'w', encoding=encoding) as r:
         r.write(report)
 
-    report_dir = os.path.splitext(report_path)[0]
-    os.makedirs(report_dir, exist_ok=True)
-
-    shutil.move(temp_report_path, report_path)
+    logging.info(f'В отчет размещено {report_size} строк.')
 
 
-def get_config(path) -> typing.Dict:
-    with open(path, 'r') as f:
-        config_from_file = json.load(f)
+def main(current_config: dict):
+    log_file: LogFile = get_log_file_candidate(current_config=current_config)
 
-    result = {**config_default, **config_from_file}
-    return result
+    if log_file.path != '':
+        line_by_line = read_file(log_file, current_config)
+        raw_data: dict | None = parse_file(line_by_line, current_config)
+        rep_data: list = get_report_data(raw_data)
 
-
-def get_arg_parser() -> ArgumentParser:
-    parser = ArgumentParser(description='Generating a report with analysis of nginx logs')
-
-    parser.add_argument(
-        '--config',
-        type=str,
-        default='./resources/config.json',
-        help='configuration file path  (./resources/config.json)'
-    )
-    return parser
-
-
-def analyze(config: typing.Dict) -> None:
-    log_file: LogFile = get_latest_log(logs_path=config['log-analyzer'])
-
-    if log_file is None:
-        return
-
-    report_path: str = os.path.join(config['reports'],
-                                    'report-' + log_file.file_date.strftime('%Y.%m.%d') + '.html')
-
-    if os.path.exists(report_path):
-        return
-
-    log_lines = get_log_lines(log_file.path)
-    raw_data = parse_log(lines=log_lines, error_limit=config['PARSING_ERROR_LIMIT'])
-
-    if not raw_data:
-        return
-
-    report_data: typing.List = calc_report_data(data=raw_data)
-
-    rendering_report(data=report_data, template_path=config['TEMPLATE_REPORT_PATH'],
-                     report_path=report_path, size=config['REPORT_SIZE'])
+        report_file: str = get_report_name(current_config, log_file)
+        rendering_report(data=rep_data, report_path=report_file, current_config=current_config)
 
 
 if __name__ == '__main__':
 
-    arg_parser: ArgumentParser = get_arg_parser()
-    args = arg_parser.parse_args()
+    # отработка аргументов командной строки
+    parser = create_parser(config)
+    namespace = parser.parse_args(sys.argv[1:])
 
-    current_config: typing.Dict = get_config(args.config)
-
-    logging.basicConfig(
-        filename=current_config.get('LOG_FILE_APP_PATH'), level=logging.INFO,
-        format='[%(asctime)s] %(levelname).1s %(message)s',
-        datefmt='%Y.%m.%d %H:%M:%S',
-        encoding='UTF-8'
-    )
+    first_description_print(config)
+    log_init(config)
+    current_config: dict = get_config(namespace.config, config)
 
     try:
-        analyze(config=current_config)
+        start_time = datetime.now()
+        main(config)
+        logging.info(f'Длительность операции: {datetime.now() - start_time}')
+
     except Exception:
         logging.exception('Unexpected error')
