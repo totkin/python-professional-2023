@@ -25,6 +25,7 @@
 - [argparse.py](https://docs.python.org/3/library/argparse.html) Официальная документация
 - [logging](https://docs.python.org/3/library/logging.html) Официальная документация
 - [loguru](https://loguru.readthedocs.io/en/stable/overview.html) логирование ошибок
+- [Регулярные выражения в Python](https://habr.com/ru/articles/349860/): примеры, картинки, упражнения
 <hr>
 
 #### По заданиям

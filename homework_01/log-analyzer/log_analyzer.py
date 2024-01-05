@@ -1,289 +1,206 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+import gzip
 import json
 import logging
+import operator
+import os
+import re
+import shutil
+import tempfile
+import typing
+from argparse import ArgumentParser
+from collections import namedtuple
+from datetime import datetime
+from decimal import Decimal
+from statistics import mean, median
+from string import Template
 
-import os.path
-import sys
-from argparse import ArgumentParser, FileType
-from functools import wraps
-
-# log_format ui_short '$remote_addr  $remote_user $http_x_real_ip [$time_local] "$request" '
-#                     '$status $body_bytes_sent "$http_referer" '
-#                     '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
-#                     '$request_time';
-
-
-config = {
-    "REPORT_SIZE": 1000,
-    "REPORT_DIR": "./reports",
-    "LOG_DIR": "./log-analyzer",
-    # "APP_LOG_FILE_PATH": "./resources/log_analyzer_log.log",  # - может быть загружено через внешний конфиг
+config_default = {
+    'REPORT_SIZE': 1000,
+    'reports': './reports',
+    'log-analyzer': './log-analyzer',
+    'PARSING_ERROR_LIMIT': 20,
+    'TEMPLATE_REPORT_PATH': './report_template.html',
+    'LOG_FILE_APP_PATH': './log_file.log',
 }
 
-# Сборник локальных параметров / вместо констант /
-config_local = {
-    # Стандартный путь расположения config
-    "APP_CONFIG_DEFAULT_PATH": "./resources/config.json",
-    # Место расположения с информацией о последнем запуске программы
-    "APP_FILE_LAST_EFFECTIVE_START": "./resources/last_effective_start.json",
-    # Название приложения
-    "APP_NAME": os.path.basename(sys.argv[0]).replace('.py', ''),
-    # Версия программы
-    "APP_VERSION": "0.1.20231229",
-    # Режим отладки. True == отладка, False == нормальный режим.
-    "APP_DEBUG": True,
-    # Файл для лога debug-режима
-    "APP_DEBUG_LOG_FILE_PATH": "./resources/debug-log/debug_log.log",
-}
+LogFile = namedtuple('LogFile', ['path', 'file_date'])
 
 
-def debug_log(func):
-    """Декоратор для отладки"""
-
-    @wraps(func)
-    def wrapper_debug(*args, **kwargs):
-
-        if config_local.get("APP_DEBUG"):
-            args_repr = [repr(a) for a in args]
-            kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]
-            signature = ", ".join(args_repr + kwargs_repr)
-            logging.info(f"Calling {func.__name__}({signature})")
-
-        value = func(*args, **kwargs)
-
-        if config_local.get("APP_DEBUG"):
-            logging.info(f"{func.__name__!r} returned {value!r}")
-
-        return value
-
-    return wrapper_debug
-
-
-class WorkFile:
-    """
-    # {"обрабатываем":"", "имя файла":"", "время прошлой обработки":"", "результат прошлой обработки":""}
-    """
-
-    def __init__(self, last_result_conditions_file: str | None):
-        self.last_result_conditions_file = last_result_conditions_file
-        self.conditions = self.init_conditions()
-
-    def __str__(self, ):
-        return json.dumps(self, default=lambda _: _.__dict__)
-
-    def __repr__(self, ):
-        return self.__str__()
-
-    def read_last_result_conditions(self, last_result_file: str | None) -> dict:
-        # Файл есть
-        if os.path.exists(self.last_result_conditions_file):
-            with open(self.last_result_conditions_file, 'r', encoding='UTF-8') as loc_file:
-                last_file_info: dict = json.load(loc_file)
-
-        # Файла нет
-        else:
-            # Нет файла с записью
-            # Режим отладки, создаю тестовую версию
-            if config_local.get("APP_DEBUG"):
-                last_file_info = {"PROCESSING": True,
-                                  "FILE_NAME": "nginx-access-ui.log-20170630.gz",
-                                  "FILE_TYPE": "gz",
-                                  "LAST_PROCESSING_DATETIME": "2023.12.2012:48:16",
-                                  "LAST_PROCESSING_RESULT": "OK",
-                                  "LAST_PROCESSING_QUALITY": 1.0}
-
-            # Нормальный режим, создаю тестовую версию
-            else:
-                last_file_info = {"PROCESSING": True,
-                                  "FILE_NAME": "",
-                                  "FILE_TYPE": "",
-                                  "LAST_PROCESSING_DATETIME": "",
-                                  "LAST_PROCESSING_RESULT": "",
-                                  "LAST_PROCESSING_QUALITY": 1.0}
-        return last_file_info
-
-    def init_conditions(self, ) -> dict:
-        """
-        # проверить существование пути расположения логов
-        # найти самый новый файл
-        # проверить, что он не обрабатывался, если уже обрабатывался, то вернуть результат (успех-падение, % охвата)
-        # return work_file
-        """
-        target_conditions: dict | None = self.read_last_result_conditions(self.last_result_conditions_file)
-        # найти самый новый файл
-        # проверить, что он не обрабатывался, если уже обрабатывался, то вернуть результат (успех-падение, % охвата)
-        # return work_file
-
-        file_name_template = re.compile(r"""nginx-access-ui\.log-(?P<log_date>\d{8})(\.gz$|$)""", re.IGNORECASE)
-
-        latest_log = None
-        for path in os.listdir(logs_path):
-            file_log = re.search(file_name_template, path)
-
-            if not file_log or os.path.isdir(path):
-                continue
-
-            file_name_data = file_log.groupdict()
-            try:
-                file_date = datetime.strptime(file_name_data['log_date'], '%Y%m%d').date()
-            except ValueError:
-                continue
-
-            if not latest_log or latest_log.file_date < file_date:
-                latest_log = LogFile(path=os.path.join(logs_path, path), file_date=file_date)
-
-        return target_conditions
-
-    def save_result_conditions(self, file_info: dict):
-        json_object = json.dumps(file_info, default=lambda o: o.__dict__)
-        with open(self.last_result_conditions_file, 'w') as f:
-            f.write(json_object)
+def get_latest_log(logs_path: str) -> typing.Union[LogFile, None]:
+    if not os.path.exists(logs_path):
         return
 
+    file_name_template = re.compile(r"""nginx-access-ui\.log-(?P<log_date>\d{8})(\.gz$|$)""", re.IGNORECASE)
+    logging.info(file_name_template)
+    latest_log = None
+    for path in os.listdir(logs_path):
+        file_log = re.search(file_name_template, path)
 
-class Report:
+        if not file_log or os.path.isdir(path):
+            continue
 
-    def __init__(self):
-        pass
+        file_name_data = file_log.groupdict()
+        try:
+            file_date = datetime.strptime(file_name_data['log_date'], '%Y%m%d').date()
+        except ValueError:
+            continue
 
-    def make_report(self):
-        pass
+        if not latest_log or latest_log.file_date < file_date:
+            latest_log = LogFile(path=os.path.join(logs_path, path), file_date=file_date)
 
-    def save_report(self):
-        pass
+    return latest_log
 
 
-def create_parser() -> ArgumentParser:
-    """
-    обработка аргументов и консольного запуска
-    :return: ArgumentParser
-    """
-    loc_prog_name = config_local.get("APP_NAME")
-    loc_prog_version = config_local.get("APP_VERSION")
-    loc_config_path = config_local.get("APP_CONFIG_DEFAULT_PATH")
-    loc_config_debug_mode = config_local.get("APP_DEBUG")
+def get_log_lines(log_path: str):
+    opener = gzip.open if log_path.endswith('.gz') else open
+    log_file = opener(log_path, "rt")
+    for line in log_file:
+        yield line
+    log_file.close()
 
-    parser: ArgumentParser = ArgumentParser(
-        description=f'{loc_prog_name} - анализатор логов. Создан в рамках ДЗ-01 учебной программы OTUS.',
-        epilog='(c) T for Otus 2023. Применение ограничено рамками учебной задачи.',
-        add_help=False,
+
+def parse_log(lines, error_limit: int) -> typing.Union[typing.Dict, None]:
+    line_format = re.compile(
+        r"""- \[(?P<dateandtime>\d{2}\/[a-z]{3}\/\d{4}:\d{2}:\d{2}:\d{2} (\+|\-)\d{4})\] ((\"[A-Z]+ )(?P<url>.+)(http\/\d+\.\d+")) (?P<statuscode>\d{3}) (?P<bytessent>\d+) (["](?P<refferer>(\-)|(.+))["]) (["](?P<useragent>.+)["]) (?P<request_time>\d+\.\d+)""",
+        # noqa E501
+        re.IGNORECASE
     )
-    arg_group = parser.add_argument_group(title='Параметры')
 
-    arg_group.add_argument('-c', '--config',
-                           # type=FileType(),
-                           metavar='',
-                           help=f'Файл конфигурации. По-умолчанию это {loc_config_path}',
-                           default=loc_config_path,
-                           )
-    arg_group.add_argument('-v', '--version',
-                           action='version',
-                           help='Номер версии',
-                           version=f'{loc_prog_name} v.{loc_prog_version}')
-    arg_group.add_argument('-d', '--debug',
-                           type=FileType(),
-                           metavar='',
-                           help=f'Проверка отключения debug-режима {loc_config_debug_mode}',
-                           default=loc_config_debug_mode,
-                           )
-    arg_group.add_argument('-h', '--help', action='help', help='Справка')
+    count_lines: int = 0
+    count_error: int = 0
 
-    return parser
+    result = {}
+    for line in lines:
+        count_lines += 1
+        line_data = re.search(line_format, line)
 
+        if not line_data:
+            count_error += 1
+            continue
 
-@debug_log
-def first_description_print() -> None:
-    """
-    вывод информации при запуске
-    """
-    loc_prog_name = config_local.get("APP_NAME")
-    loc_prog_version = config_local.get("APP_VERSION")
-    print(f'{loc_prog_name} v.{loc_prog_version}',
-          '- анализатор логов. Создан в рамках ДЗ-01 учебной программы OTUS.')
-    return
+        datadict = line_data.groupdict()
+        url = datadict["url"]
+        request_time = Decimal(datadict["request_time"])
+
+        if url in result:
+            result[url].append(request_time)
+        else:
+            result[url] = [request_time]
+
+    check_parsing_result = (count_error / count_lines) * 100 < error_limit
+    if check_parsing_result:
+        return result
+    else:
+        raise RuntimeError(f'The threshold value for the number {error_limit} of parsing errors has been exceeded')
 
 
-def log_init() -> None:
-    """
-    Инициализация logging - для DEBUG и NORMAL режимов работы
-    :return: None
-    """
-    # NORMAL mode
-    if not config_local.get("APP_DEBUG"):
-        loc_file_path = config.get('APP_LOG_FILE_PATH')
-        loc_str = '[%(asctime)s] %(levelname).1s %(message)s'
-        logging.basicConfig(
-            filename=loc_file_path,
-            level=logging.INFO,
-            format=loc_str,
-            datefmt='%Y.%m.%d%H:%M:%S'
+def calc_report_data(data: typing.Dict) -> typing.List:
+    count_all: int = len(data)
+
+    resp_time_sum = Decimal(0)
+    for i in data.values():
+        resp_time_sum += sum(i)
+
+    result = []
+    for k, v in data.items():
+        count_url = len(v)
+        resp_time_sum_url = sum(v)
+        result.append(
+            {
+                'url': k,
+                'count': count_url,
+                'count_perc': Decimal(
+                    count_url / count_all * 100
+                ).quantize(Decimal('1.111')),
+                'time_sum': resp_time_sum_url,
+                'time_perc': Decimal(
+                    resp_time_sum_url / resp_time_sum * 100
+                ).quantize(Decimal('1.111')),
+                'time_avg': Decimal(mean(v)).quantize(Decimal('1.111')),
+                'time_max': max(v),
+                'time_med': median(v)
+            }
         )
 
-    # DEBUG mode
-    else:
-        loc_file_path = config_local.get('APP_DEBUG_LOG_FILE_PATH')
-        loc_dir_path = os.path.dirname(loc_file_path)
-        if not os.path.isdir(loc_dir_path):
-            os.makedirs(loc_dir_path)
-
-        loc_str = "%(asctime)s ; [%(levelname)s] ; %(funcName)s ; %(lineno)d ; %(message)s"
-        logging.basicConfig(
-            filename=loc_file_path,
-            level=logging.INFO,
-            format=loc_str,
-            datefmt='%Y.%m.%d%H:%M:%S',
-            filemode="w"
-        )
-        logging.info("Log start")
-
-    return
-
-
-def make_empty_config(config_path):
-    json_object: dict = {}
-    with open(config_path, 'w') as f:
-        json.dump(json_object, f)
-
-
-def get_config(config_path) -> dict:
-    if not os.path.exists(config_path):
-        if config_local.get("APP_DEBUG"):
-            logging.warning("config file not exist")
-
-        make_empty_config(config_path)
-
-    with open(config_path, 'r', encoding='UTF-8') as loc_file:
-        config_extra = json.load(loc_file)
-
-    # Python 3.9^ -> 'result = config | config_extra' or 'result | = config_extra'
-    if sys.version_info <= (3, 9):
-        result = {**config, **config_extra}
-    else:
-        result = config | config_extra
-
-    if config_local.get("APP_DEBUG"):
-        logging.info(result)
-
+    result.sort(key=operator.itemgetter('time_sum'), reverse=True)
     return result
 
 
-def main():
-    pass
+def rendering_report(data: typing.List, template_path: str, report_path: str, size: int) -> None:
+    with open(template_path, 'r') as t:
+        template = Template(t.read())
+
+    report = template.safe_substitute(table_json=json.dumps(data[:size], default=str))
+
+    temp_report_path = tempfile.mkstemp()[1]
+    with open(temp_report_path, 'w') as r:
+        r.write(report)
+
+    report_dir = os.path.splitext(report_path)[0]
+    os.makedirs(report_dir, exist_ok=True)
+
+    shutil.move(temp_report_path, report_path)
 
 
-if __name__ == "__main__":
-    parser = create_parser()
-    namespace = parser.parse_args(sys.argv[1:])
+def get_config(path) -> typing.Dict:
+    with open(path, 'r') as f:
+        config_from_file = json.load(f)
 
-    first_description_print()
-    log_init()
-    current_config: dict = get_config(namespace.config)
+    result = {**config_default, **config_from_file}
+    return result
 
-    wf = WorkFile(config_local.get("APP_FILE_LAST_EFFECTIVE_START"))
 
-    print(wf.conditions)
+def get_arg_parser() -> ArgumentParser:
+    parser = ArgumentParser(description='Generating a report with analysis of nginx logs')
 
-    # wf.save()
+    parser.add_argument(
+        '--config',
+        type=str,
+        default='./resources/config.json',
+        help='configuration file path  (./resources/config.json)'
+    )
+    return parser
 
-    main()
+
+def analyze(config: typing.Dict) -> None:
+    log_file: LogFile = get_latest_log(logs_path=config['log-analyzer'])
+
+    if log_file is None:
+        return
+
+    report_path: str = os.path.join(config['reports'],
+                                    'report-' + log_file.file_date.strftime('%Y.%m.%d') + '.html')
+
+    if os.path.exists(report_path):
+        return
+
+    log_lines = get_log_lines(log_file.path)
+    raw_data = parse_log(lines=log_lines, error_limit=config['PARSING_ERROR_LIMIT'])
+
+    if not raw_data:
+        return
+
+    report_data: typing.List = calc_report_data(data=raw_data)
+
+    rendering_report(data=report_data, template_path=config['TEMPLATE_REPORT_PATH'],
+                     report_path=report_path, size=config['REPORT_SIZE'])
+
+
+if __name__ == '__main__':
+
+    arg_parser: ArgumentParser = get_arg_parser()
+    args = arg_parser.parse_args()
+
+    current_config: typing.Dict = get_config(args.config)
+
+    logging.basicConfig(
+        filename=current_config.get('LOG_FILE_APP_PATH'), level=logging.INFO,
+        format='[%(asctime)s] %(levelname).1s %(message)s',
+        datefmt='%Y.%m.%d %H:%M:%S',
+        encoding='UTF-8'
+    )
+
+    try:
+        analyze(config=current_config)
+    except Exception:
+        logging.exception('Unexpected error')

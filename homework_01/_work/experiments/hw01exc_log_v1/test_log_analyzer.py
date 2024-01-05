@@ -20,8 +20,8 @@ class TestLogAnalyzer(unittest.TestCase):
     config_dir = os.path.join(fixture_dir, 'config')
     config = {
         'REPORT_SIZE': 10,
-        'REPORT_DIR': report_dir,
-        'LOG_DIR': log_dir,
+        'reports': report_dir,
+        'log-analyzer': log_dir,
         'PARSING_ERROR_LIMIT': 20,
         'TEMPLATE_REPORT_PATH': os.path.join(
             fixture_dir, 'report_template.html'

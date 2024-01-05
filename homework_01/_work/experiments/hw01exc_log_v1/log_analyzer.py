@@ -16,8 +16,8 @@ from string import Template
 
 config_default = {
     'REPORT_SIZE': 1000,
-    'REPORT_DIR': './reports',
-    'LOG_DIR': './log',
+    'reports': './reports',
+    'log-analyzer': './log',
     'PARSING_ERROR_LIMIT': 20,
     'TEMPLATE_REPORT_PATH': './report_template.html',
     'LOG_FILE_APP_PATH': './',
@@ -163,12 +163,12 @@ def get_arg_parser() -> ArgumentParser:
 
 
 def analyze(config: typing.Dict) -> None:
-    log_file: LogFile = get_latest_log(logs_path=config['LOG_DIR'])
+    log_file: LogFile = get_latest_log(logs_path=config['log-analyzer'])
 
     if log_file is None:
         return
 
-    report_path: str = os.path.join(config['REPORT_DIR'],
+    report_path: str = os.path.join(config['reports'],
                                     'report-' + log_file.file_date.strftime('%Y.%m.%d') + '.html')
 
     if os.path.exists(report_path):
