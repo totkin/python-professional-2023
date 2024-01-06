@@ -3,16 +3,19 @@ import os
 import shutil
 import unittest
 
+
 from log_analyzer import get_latest_log, analyze, LogFile
+
+
 
 
 class TestLogAnalyzer(unittest.TestCase):
     fixture_dir = './test_fixture'
     log_dir = os.path.join(fixture_dir, 'log')
     log_files = [
-        'nginx-access-ui.log-20210606',
-        'nginx-access-ui.log-20210506.gz',
-        'nginx-access-ui.log-20210607.gz2',
+        'nginx-access-ui.log-20240106',
+        'nginx-access-ui.log-20240106.gz',
+        'nginx-access-ui.log-20240106.gz2',
     ]
 
     report_dir = os.path.join(fixture_dir, 'reports')
@@ -20,8 +23,8 @@ class TestLogAnalyzer(unittest.TestCase):
     config_dir = os.path.join(fixture_dir, 'config')
     config = {
         'REPORT_SIZE': 10,
-        'reports': report_dir,
-        'log-analyzer': log_dir,
+        'REPORT_DIR': report_dir,
+        'LOG_DIR': log_dir,
         'PARSING_ERROR_LIMIT': 20,
         'TEMPLATE_REPORT_PATH': os.path.join(
             fixture_dir, 'report_template.html'

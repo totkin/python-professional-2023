@@ -1,1 +1,1 @@
-{"PROCESSING": true, "FILE_NAME": "nginx-access-ui.log-20170630.gz", "FILE_TYPE": "gz", "PROCESSING_DATETIME": "2023.12.2012:48:16", "PROCESSING_RESULT": "OK", "PROCESSING_QUALITY": 1.0}
+{"path": "./log-analyzer\nginx-access-ui.log-20170630.gz", "extension": "gz", "date": "2017-06-30", "status": true, "percent_error": 0.0}

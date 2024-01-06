@@ -27,7 +27,7 @@ config = {
 class ConfigLocal:
     """Сборник локальных параметров. Вместо констант. Изменения запрещены."""
 
-    APP_CONFIG_DEFAULT_PATH: str = "../../../log-analyzer/resources/config.json"  # Стандартный путь расположения config
+    APP_CONFIG_DEFAULT_PATH: str = "../../../log-analyzer/reports/config.json"  # Стандартный путь расположения config
     APP_FILE_LAST_EFFECTIVE_START: str = "../../../log-analyzer/resources/last_effective_start.json"  # Информация о последнем запуске программы
     APP_LOG_FILE_PATH: str = "./resources/log_analyzer_log.log",  # Файл лога нормального режима
 

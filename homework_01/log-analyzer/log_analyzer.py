@@ -4,7 +4,7 @@ import logging
 import os
 import re
 import sys
-from argparse import ArgumentParser, FileType
+from argparse import ArgumentParser
 from dataclasses import dataclass
 from datetime import datetime, date
 from decimal import Decimal
@@ -21,7 +21,7 @@ config = {
     'APP_NAME': os.path.basename(sys.argv[0]).replace('.py', ''),
     'APP_VERSION': '0.1.20240105',
 
-    'app_debug': True,  # Режим отладки. True == режим отладки, False == нормальный режим.
+    'app_debug': False,  # Режим отладки. True == режим отладки, False == нормальный режим.
     'app_debug_log_file_path': "./resources/debug_log_file.log",  # Файл лога режима отладки
 
     'app_parsing_error_limit_percent': 20,
@@ -50,7 +50,7 @@ config = {
             + r'\[(?P<time_local>\d{2}\/[A-Za-z]{3}\/\d{4}:\d{2}:\d{2}:\d{2} (\+|\-)\d{4})\] '
             + r'\"(?P<request>.+?)\" '
             + r'(?P<status>\d{1,3}) '
-            + r'(?P<body_bytes_sent>\d{1,}) '
+            + r'(?P<body_bytes_sent>\d+) '
             + r'\"(?P<http_referer>.+?)\" '
             + r'\"(?P<http_user_agent>.+?)\" '
             + r'\"(?P<http_x_forwarded_for>.+?)\" '
@@ -68,9 +68,16 @@ class LogFile:
     extension: str = ""
     date: date = datetime.strptime('19700101', "%Y%d%m").date()
     status: bool = False,
-    status_text: str = ""
+    percent_error: Decimal('1.000') = 0.0
 
+    def to_json(self, ):
+        """ Простая заплатка из-за использования datetime.date и Decimal"""
 
+        temp_str = f'"path": "{self.path}", "extension": "{self.extension}", "date": "{self.date}", '
+        temp_str += f'"status": {json.dumps(self.status)}, "percent_error": {json.dumps(self.percent_error)}'
+        temp_str = '{' + temp_str + '}'
+
+        return temp_str
 
 
 def create_parser(current_config: dict) -> ArgumentParser:
@@ -85,7 +92,7 @@ def create_parser(current_config: dict) -> ArgumentParser:
 
     parser: ArgumentParser = ArgumentParser(
         description=f'{loc_prog_name} - анализатор логов. Создан в рамках ДЗ-01 учебной программы OTUS.',
-        epilog='(c) T for Otus 2023. Применение ограничено рамками учебной задачи.',
+        epilog='(c) T for Otus 2024. Применение ограничено рамками учебной задачи.',
         add_help=False,
     )
     arg_group = parser.add_argument_group(title='Параметры')
@@ -100,12 +107,6 @@ def create_parser(current_config: dict) -> ArgumentParser:
                            action='version',
                            help='Номер версии',
                            version=f'{loc_prog_name} v.{loc_prog_version}')
-    arg_group.add_argument('-d', '--debug',
-                           type=FileType(),
-                           metavar='',
-                           help=f'Проверка отключения debug-режима {loc_config_debug_mode}',
-                           default=loc_config_debug_mode,
-                           )
     arg_group.add_argument('-h', '--help', action='help', help='Справка')
 
     return parser
@@ -150,7 +151,7 @@ def log_init(current_config: dict) -> None:
         loc_dir_path = os.path.dirname(loc_file_path)
         os.makedirs(loc_dir_path, exist_ok=True)
 
-        loc_str = "%(asctime)s ; [%(levelname)s] ; %(funcName)s ; %(lineno)d ; %(message)s"
+        loc_str = "%(asctime)s;%(levelname)s;%(funcName)s;%(lineno)d;%(message)s"
         logging.basicConfig(
             filename=loc_file_path,
             level=logging.INFO,
@@ -164,21 +165,15 @@ def log_init(current_config: dict) -> None:
     return
 
 
-def make_empty_config(config_path):
-    json_object: dict = {}
-    with open(config_path, 'w') as f:
-        json.dump(json_object, f)
-
-
 def get_config(config_path: str, local_config: dict) -> dict:
     app_debug = local_config.get('app_debug')
     encoding = local_config.get('app_encoding')
 
     if not os.path.exists(config_path):
         if app_debug:
-            logging.warning("Не существует файла конфигурации")
-
-        make_empty_config(config_path)
+            logging.warning("Не существует файла конфигурации. Создаю пустой.")
+        with open(config_path, 'w') as f:
+            json.dump({}, f)
 
     with open(config_path, 'r', encoding=encoding) as loc_file:
         config_extra = json.load(loc_file)
@@ -196,8 +191,8 @@ def get_config(config_path: str, local_config: dict) -> dict:
 
 
 def duple_info(str_info: str):
-    # print(str_info)
     logging.info(str_info)
+    print(str_info)
 
 
 def get_log_file_candidate(current_config: dict) -> LogFile:
@@ -228,13 +223,20 @@ def get_log_file_candidate(current_config: dict) -> LogFile:
                         except Exception:
                             logging.exception(Exception)
     else:
-        duple_info(f'Папки с логами {logs_dir} не существует.')
+        str_info = f'Папки с логами {logs_dir} не существует.'
+        logging.info(str_info)
+        print(str_info)
         return result_file
 
     if result_file.path == '':
-        duple_info(f"Нет файлов логов в папке {logs_dir} с допустимыми расширениями {correct_log_files_extensions}")
+
+        str_info = f"Нет файлов логов в папке {logs_dir} с допустимыми расширениями {correct_log_files_extensions}"
+        logging.info(str_info)
+        print(str_info)
     else:
-        duple_info(f"Найден файл-кандидат на обработку {result_file.path}")
+        str_info = f"Найден файл-кандидат на обработку {result_file.path}"
+        logging.info(str_info)
+        print(str_info)
         result_file = check_log_file_candidate(current_config, result_file)
 
     return result_file
@@ -243,12 +245,18 @@ def get_log_file_candidate(current_config: dict) -> LogFile:
 def check_log_file_candidate(current_config: dict, result_file: LogFile) -> LogFile:
     filename = current_config.get('app_file_last_start')
     encoding = current_config.get('app_encoding')
+    conditions: dict = {}
     if os.path.exists(filename):
         with open(filename, 'r', encoding=encoding) as loc_file:
             conditions = json.load(loc_file)
-    if result_file.path == conditions.get('path'):
+    if (conditions != {}
+            and conditions.get("path").__repr__() == "'" + result_file.path.__str__() + "'"
+            and conditions.get('status')):
         if conditions.get('status'):
-            duple_info(f'Файл уже был успешно обработан ранее: {conditions}')
+            str_info = f'Файл уже был успешно обработан ранее: {conditions}'
+            logging.info(str_info)
+            print(str_info)
+
             result_file = LogFile()
     return result_file
 
@@ -258,21 +266,24 @@ def get_report_name(current_config: dict, log_file: LogFile) -> str:
     report_name = f"report-{log_file.date.strftime('%Y.%m.%d')}.html"
     report_path: str = os.path.join(report_dir, report_name)
     if os.path.exists(report_path):
-        duple_info(f'Файл с отчетом {report_path} уже существует и будет перезаписан.')
+        str_info = f'Файл с отчетом {report_path} уже существует и будет перезаписан.'
+        logging.info(str_info)
+        print(str_info)
     return report_path
 
 
-def read_file(log_file: LogFile, current_config: dict, ):
+def read_file_line_by_line(log_file: LogFile, current_config: dict, ):
     correct_log_files_extensions: dict = current_config.get('app_correct_log_files_extensions')
     open_with = correct_log_files_extensions.get(log_file.extension)
     _encoding = current_config.get('app_encoding')
 
     file = open_with(log_file.path, mode='rt', encoding=_encoding)
-    for _ in file: yield _
+    for _ in file:
+        yield _
     file.close()
 
 
-def parse_file(rows, current_config: dict, ) -> dict | None:
+def parse_file(rows, log_file: LogFile, current_config: dict, ) -> dict | None:
     """Чтение данных из файла с логами"""
     error_limit_percent = current_config.get('app_parsing_error_limit_percent')
     line_format = current_config.get('app_line_regex_template')
@@ -294,25 +305,41 @@ def parse_file(rows, current_config: dict, ) -> dict | None:
             remote_addr = datadict['remote_addr']
             request_time = datadict['request_time']
 
-            if not remote_addr in result:
+            if remote_addr not in result:
                 result[remote_addr] = []
             result[remote_addr].append(Decimal(request_time))
 
-    check_parsing_result = (count_error / count_lines) * 100 < error_limit_percent
+    check_parsing_result = (count_error / count_lines) * 100
+    log_file.percent_error = check_parsing_result
+    check_parsing_result = check_parsing_result < error_limit_percent
     if check_parsing_result:
-        logging.info(f'Обработано строк:{count_lines}. Ошибок: {count_error}')
+        str_info = f'Обработано строк: {count_lines}. Ошибок: {count_error}'
+        logging.info(str_info)
+        print(str_info)
+        log_file.status = True
         return result
     else:
-        logging.info(f'Обработано строк:{count_lines}. Ошибок: {count_error}')
+        str_info = f'Обработано строк:{count_lines}. Ошибок: {count_error}'
+        logging.info(str_info)
+        print(str_info)
+        log_file.status = False
+        save_file_last_start(log_file, current_config)
         raise RuntimeError(f'Кол-во ошибок при парсинге лога превысило установленный порог в {error_limit_percent} %')
 
 
-def save_file_last_start(current_config: dict):
-    """ Нужно как-то сохранить результаты операций """
-    pass
+def save_file_last_start(log_file: LogFile, current_config: dict, ):
+    """ Сохранить результаты обработки """
+
+    encoding = current_config.get('app_encoding')
+    file_last_start = current_config.get('app_file_last_start')
+
+    json_object = log_file.to_json()
+    with open(file_last_start, 'w', encoding=encoding) as f:
+        f.write(json_object)
+    return
 
 
-def get_report_data(data_dict: dict,) -> list:
+def get_report_data(data_dict: dict, ) -> list:
     """ На основе считанных данных, готовится выходной массив информации
 
         # Report data
@@ -324,6 +351,8 @@ def get_report_data(data_dict: dict,) -> list:
         # time_avg   - средний $request_time для данного URL'а
         # time_max   - маĸсимальный $request_time для данного URL'а
         # time_med   - медиана $request_time для данного URL'а
+
+        Использую нумерацию столбцов для сортировки (и КРАСОТЫ!)
     """
     resp_time_sum = 0
     count_all: int = 0
@@ -343,7 +372,7 @@ def get_report_data(data_dict: dict,) -> list:
                 'url': u,
                 '(1) count': count_url,
                 '(2) count_perc': Decimal(count_perc).quantize(Decimal('1.00')),
-                '(3) time_sum': Decimal(resp_time_sum_url).quantize(Decimal('1.')),
+                '(3) time_sum': Decimal(resp_time_sum_url).quantize(Decimal('1.000')),
                 '(4) time_perc': Decimal(time_perc).quantize(Decimal('1.00')),
                 '(5) time_avg': Decimal(mean(v)).quantize(Decimal('1.000')),
                 '(6) time_max': Decimal(max(v)).quantize(Decimal('1.000')),
@@ -351,7 +380,9 @@ def get_report_data(data_dict: dict,) -> list:
             }
         )
 
-    logging.info(f'Общее число url в логе:{len(result)}')
+    str_info = f'Общее число url в логе: {len(result)}'
+    logging.info(str_info)
+    print(str_info)
     result.sort(key=itemgetter('(3) time_sum'), reverse=True)
     return result
 
@@ -371,19 +402,27 @@ def make_report(data: list, report_path: str, current_config: dict, ) -> None:
     with open(report_path, 'w', encoding=encoding) as r:
         r.write(report)
 
-    logging.info(f'В отчет размещено {report_size} строк.')
+    str_info = f'В отчет размещено {report_size} строк.'
+    logging.info(str_info)
+    print(str_info)
 
 
 def main(current_config: dict):
     log_file: LogFile = get_log_file_candidate(current_config=current_config)
 
     if log_file.path != '':
-        line_by_line = read_file(log_file, current_config)
-        raw_data: dict | None = parse_file(line_by_line, current_config)
+        line_by_line = read_file_line_by_line(log_file, current_config)
+        raw_data: dict | None = parse_file(line_by_line, log_file, current_config)
         rep_data: list = get_report_data(raw_data)
 
-        report_file: str = get_report_name(current_config, log_file)
-        make_report(data=rep_data, report_path=report_file, current_config=current_config)
+        rep_file: str = get_report_name(current_config, log_file)
+        make_report(data=rep_data, report_path=rep_file, current_config=current_config)
+
+        save_file_last_start(log_file, current_config)
+    else:
+        str_info = 'Не найдено файлов для обработки.'
+        logging.info(str_info)
+        print(str_info)
 
 
 if __name__ == '__main__':
@@ -399,7 +438,9 @@ if __name__ == '__main__':
     try:
         start_time = datetime.now()
         main(config)
-        logging.info(f'Длительность операции: {datetime.now() - start_time}')
+        str_info = f'Длительность операции: {datetime.now() - start_time}'
+        logging.info(str_info)
+        print(str_info)
 
     except Exception:
         logging.exception('Unexpected error')
