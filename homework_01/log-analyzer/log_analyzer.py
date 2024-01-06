@@ -88,10 +88,10 @@ def create_parser(current_config: dict) -> ArgumentParser:
     loc_prog_name = current_config.get('APP_NAME')
     loc_prog_version = current_config.get('APP_VERSION')
     loc_config_path = current_config.get('app_config_default_path')
-    loc_config_debug_mode = current_config.get('app_debug')
 
     parser: ArgumentParser = ArgumentParser(
-        description=f'{loc_prog_name} - анализатор логов. Создан в рамках ДЗ-01 учебной программы OTUS.',
+        description=f'{loc_prog_name} - анализатор логоloc_config_debug_modeв. ' +
+                    'Создан в рамках ДЗ-01 учебной программы OTUS.',
         epilog='(c) T for Otus 2024. Применение ограничено рамками учебной задачи.',
         add_help=False,
     )
