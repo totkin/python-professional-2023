@@ -19,7 +19,7 @@ config = {
     'app_config_default_path': './resources/config.json',  # Стандартный путь расположения config
 
     'APP_NAME': os.path.basename(sys.argv[0]).replace('.py', ''),
-    'APP_VERSION': '0.1.20240105',
+    'APP_VERSION': '0.1.20240106',
 
     'app_debug': False,  # Режим отладки. True == режим отладки, False == нормальный режим.
     'app_debug_log_file_path': "./resources/debug_log_file.log",  # Файл лога режима отладки

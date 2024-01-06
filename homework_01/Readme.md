@@ -8,14 +8,14 @@
 ```
 homework_01
 ├── log-analyzer               - ОБЯЗАТЕЛЬНОЕ ЗАДАНИЕ ДЗ
-│   ├── LOG_DIR                - логи для анализа
-│   ├── REPORT_DIR             - готовые отчеты
+│   ├── log-analyzer           - логи для анализа
+│   ├── reports                - готовые отчеты
 │   ├── resources
 │   │   ├── config.json        - файл настроек
 │   │   └── report.html        - шаблон отчета
 │   ├── log_analyzer.py        ОСНОВНОЙ ФАЙЛ
 │   ├── test_log_analyzer.py   - тесты
-│   └── ReadMe.md
+│   └── ReadMe.md              - сопроводительная документация
 ├── optional-exercises         - Опциональные pocker и deco упражнения ДЗ
 └── _work                      - Рабочая папка с материалами /оставлена для своих задач автора/
 
