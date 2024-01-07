@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import datetime
-import hashlib
+import abc
 import json
+import datetime
 import logging
-import sys
+import hashlib
 import uuid
 from optparse import OptionParser
-
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 
 SALT = "Otus"
@@ -69,13 +68,11 @@ class ClientIDsField(object):
     pass
 
 
-# OK
 class ClientsInterestsRequest(object):
     client_ids = ClientIDsField(required=True)
     date = DateField(required=False, nullable=True)
 
 
-# OK - ???
 class OnlineScoreRequest(object):
     first_name = CharField(required=False, nullable=True)
     last_name = CharField(required=False, nullable=True)
@@ -85,7 +82,6 @@ class OnlineScoreRequest(object):
     gender = GenderField(required=False, nullable=True)
 
 
-# OK
 class MethodRequest(object):
     account = CharField(required=False, nullable=True)
     login = CharField(required=True, nullable=True)
@@ -98,9 +94,8 @@ class MethodRequest(object):
         return self.login == ADMIN_LOGIN
 
 
-# OK
 def check_auth(request):
-    if request.is_admin:
+    if request.login == ADMIN_LOGIN:
         digest = hashlib.sha512(datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).hexdigest()
     else:
         digest = hashlib.sha512(request.account + request.login + SALT).hexdigest()
@@ -109,24 +104,15 @@ def check_auth(request):
     return False
 
 
-# NEW
-def clients_interests_handler(request, ctx, store):
-    pass
-
-
-# NEW
-def online_score_handler(request, ctx, store):
-    pass
-
-
 def method_handler(request, ctx, store):
     response, code = None, None
     return response, code
 
 
-# OK
 class MainHTTPHandler(BaseHTTPRequestHandler):
-    router = {"method": method_handler}
+    router = {
+        "method": method_handler
+    }
     store = None
 
     def get_request_id(self, headers):
@@ -146,20 +132,11 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
             path = self.path.strip("/")
             logging.info("%s: %s %s" % (self.path, data_string, context["request_id"]))
             if path in self.router:
-                if sys.version_info < (3, 11):
-                    try:
-                        response, code = self.router[path]({"body": request, "headers": self.headers}, context,
-                                                           self.store)
-                    except Exception, e:
-                        logging.exception("Unexpected error: %s" % e)
-                        code = INTERNAL_ERROR
-                else:
-                    try:
-                        response, code = self.router[path]({"body": request, "headers": self.headers}, context,
-                                                           self.store)
-                    except Exception as e:
-                        logging.exception("Unexpected error: %s" % e)
-                        code = INTERNAL_ERROR
+                try:
+                    response, code = self.router[path]({"body": request, "headers": self.headers}, context, self.store)
+                except Exception, e:
+                    logging.exception("Unexpected error: %s" % e)
+                    code = INTERNAL_ERROR
             else:
                 code = NOT_FOUND
 
@@ -176,7 +153,6 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
         return
 
 
-# OK
 if __name__ == "__main__":
     op = OptionParser()
     op.add_option("-p", "--port", action="store", type=int, default=8080)
