@@ -90,7 +90,7 @@ def create_parser(current_config: dict) -> ArgumentParser:
     loc_config_path = current_config.get('app_config_default_path')
 
     parser: ArgumentParser = ArgumentParser(
-        description=f'{loc_prog_name} - анализатор логоloc_config_debug_modeв. ' +
+        description=f'{loc_prog_name} - анализатор логов. ' +
                     'Создан в рамках ДЗ-01 учебной программы OTUS.',
         epilog='(c) T for Otus 2024. Применение ограничено рамками учебной задачи.',
         add_help=False,
@@ -278,8 +278,8 @@ def read_file_line_by_line(log_file: LogFile, current_config: dict, ):
     _encoding = current_config.get('app_encoding')
 
     file = open_with(log_file.path, mode='rt', encoding=_encoding)
-    for _ in file:
-        yield _
+    for temp_l in file:
+        yield temp_l
     file.close()
 
 
@@ -311,17 +311,13 @@ def parse_file(rows, log_file: LogFile, current_config: dict, ) -> dict | None:
 
     check_parsing_result = (count_error / count_lines) * 100
     log_file.percent_error = check_parsing_result
-    check_parsing_result = check_parsing_result < error_limit_percent
-    if check_parsing_result:
-        str_info = f'Обработано строк: {count_lines}. Ошибок: {count_error}'
-        logging.info(str_info)
-        print(str_info)
+    str_info = f'Обработано строк: {count_lines}. Ошибок: {count_error}'
+    logging.info(str_info)
+    print(str_info)
+    if check_parsing_result < error_limit_percent:
         log_file.status = True
         return result
     else:
-        str_info = f'Обработано строк:{count_lines}. Ошибок: {count_error}'
-        logging.info(str_info)
-        print(str_info)
         log_file.status = False
         save_file_last_start(log_file, current_config)
         raise RuntimeError(f'Кол-во ошибок при парсинге лога превысило установленный порог в {error_limit_percent} %')
@@ -408,39 +404,39 @@ def make_report(data: list, report_path: str, current_config: dict, ) -> None:
 
 
 def main(current_config: dict):
-    log_file: LogFile = get_log_file_candidate(current_config=current_config)
+    try:
+        log_file: LogFile = get_log_file_candidate(current_config=current_config)
 
-    if log_file.path != '':
-        line_by_line = read_file_line_by_line(log_file, current_config)
-        raw_data: dict | None = parse_file(line_by_line, log_file, current_config)
-        rep_data: list = get_report_data(raw_data)
+        if log_file.path != '':
+            line_by_line = read_file_line_by_line(log_file, current_config)
+            raw_data: dict | None = parse_file(line_by_line, log_file, current_config)
+            rep_data: list = get_report_data(raw_data)
 
-        rep_file: str = get_report_name(current_config, log_file)
-        make_report(data=rep_data, report_path=rep_file, current_config=current_config)
+            rep_file: str = get_report_name(current_config, log_file)
+            make_report(data=rep_data, report_path=rep_file, current_config=current_config)
 
-        save_file_last_start(log_file, current_config)
-    else:
-        str_info = 'Не найдено файлов для обработки.'
-        logging.info(str_info)
-        print(str_info)
+            save_file_last_start(log_file, current_config)
+        else:
+            str_info = 'Не найдено файлов для обработки.'
+            logging.info(str_info)
+            print(str_info)
+
+    except Exception:
+        logging.exception('Unexpected error')
 
 
 if __name__ == '__main__':
-
     # отработка аргументов командной строки
     parser = create_parser(config)
     namespace = parser.parse_args(sys.argv[1:])
 
     first_description_print(config)
     log_init(config)
+
     current_config: dict = get_config(namespace.config, config)
 
-    try:
-        start_time = datetime.now()
-        main(config)
-        str_info = f'Длительность операции: {datetime.now() - start_time}'
-        logging.info(str_info)
-        print(str_info)
-
-    except Exception:
-        logging.exception('Unexpected error')
+    start_time = datetime.now()
+    main(config)
+    str_info = f'Длительность операции: {datetime.now() - start_time}'
+    logging.info(str_info)
+    print(str_info)
