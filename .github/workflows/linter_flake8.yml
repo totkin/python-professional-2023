@@ -21,4 +21,4 @@ jobs:
     - name: Analysing the code with pylint
       run: |
         cd homework_01
-        flake8 --config ./.flake8
+        flake8 --config .flake8
