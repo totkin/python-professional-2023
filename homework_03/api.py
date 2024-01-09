@@ -8,9 +8,15 @@ import logging
 import sys
 import uuid
 from dataclasses import dataclass
+
 from optparse import OptionParser
 
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+if sys.version_info.major >= 3:
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+else:
+    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+
+from scoring import get_interests, get_score
 
 
 @dataclass
@@ -247,18 +253,69 @@ def check_auth(request):
     return False
 
 
-# NEW
 def clients_interests_handler(request, ctx, store):
-    pass
+    try:
+        r = ClientsInterestsRequest(**request.arguments)
+        r.validate()
+    except ValueError as err:
+        return {
+            'code': INVALID_REQUEST,
+            'error': str(err)
+        }, INVALID_REQUEST
+
+    clients_interests = {}
+    for client_id in r.client_ids:
+        clients_interests[f'client_id{client_id}'] = get_interests(
+            'nowhere_store', client_id)
+    return clients_interests, OK
 
 
-# NEW
 def online_score_handler(request, ctx, store):
-    pass
+    if request.is_admin:
+        score = 42
+        return {'score': score}, OK
+    try:
+        r = OnlineScoreRequest(**request.arguments)
+        r.validate()
+    except ValueError as err:
+        return {
+            'code': INVALID_REQUEST,
+            'error': str(err)
+        }, INVALID_REQUEST
+
+    if not r.enough_fields:
+        return {
+            'code': INVALID_REQUEST,
+            'error': 'INVALID_REQUEST: not enough fields'
+        }, INVALID_REQUEST
+
+    score = get_score(store, r)
+    return {'score': score}, OK
 
 
 def method_handler(request, ctx, store):
     response, code = None, None
+    method = {'clients_interests': clients_interests_handler,
+              'online_score': online_score_handler}
+    try:
+        r = MethodRequest(**request.get('body'))
+        r.validate()
+    except ValueError as err:
+        return {
+            'code': INVALID_REQUEST,
+            'error': str(err)
+        }, INVALID_REQUEST
+
+    if not r.method:
+        return {
+            'code': INVALID_REQUEST,
+            'error': 'INVALID_REQUEST'
+        }, INVALID_REQUEST
+
+    if not check_auth(r):
+        return None, FORBIDDEN
+
+    response, code = method[r.method](r, ctx, store)
     return response, code
 
 
@@ -317,13 +374,15 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
 
 # OK
 if __name__ == "__main__":
+
     op = OptionParser()
     op.add_option("-p", "--port", action="store", type=int, default=8080)
     op.add_option("-l", "--log", action="store", default=None)
     (opts, args) = op.parse_args()
 
     logging.basicConfig(filename=opts.log, level=logging.INFO,
-                        format='[%(asctime)s] %(levelname).1s %(message)s', datefmt='%Y.%m.%d %H:%M:%S')
+                        format='[%(asctime)s] %(levelname).1s %(message)s',
+                        datefmt='%Y.%m.%d %H:%M:%S')
 
     server = HTTPServer(("localhost", opts.port), MainHTTPHandler)
     logging.info("Starting server at %s" % opts.port)
