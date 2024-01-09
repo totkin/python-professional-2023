@@ -342,20 +342,12 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
             path = self.path.strip("/")
             logging.info("%s: %s %s" % (self.path, data_string, context["request_id"]))
             if path in self.router:
-                if sys.version_info < (3, 11):
-                    try:
-                        response, code = self.router[path]({"body": request, "headers": self.headers}, context,
-                                                           self.store)
-                    except Exception, e:
-                        logging.exception("Unexpected error: %s" % e)
-                        code = INTERNAL_ERROR
-                else:
-                    try:
-                        response, code = self.router[path]({"body": request, "headers": self.headers}, context,
-                                                           self.store)
-                    except Exception as e:
-                        logging.exception("Unexpected error: %s" % e)
-                        code = INTERNAL_ERROR
+                try:
+                    response, code = self.router[path]({"body": request, "headers": self.headers}, context,
+                                                       self.store)
+                except Exception as e:
+                    logging.exception("Unexpected error: %s" % e)
+                    code = INTERNAL_ERROR
             else:
                 code = NOT_FOUND
 
