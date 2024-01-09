@@ -14,3 +14,7 @@ def get_creator(record: dict) -> list:
 
 if __name__ == '__main__':
     bi = dict(api=1, )
+
+    x = type('Span', (), {'data': 1, 'meth': (lambda z, y: z.data + y)})
+    i = x()
+    print('Start', f'x: {x}', f'i: {i}', f'i.data: {i.data}', f'i.meth(2): {i.meth(2)}', sep='\n...')

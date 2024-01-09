@@ -7,9 +7,16 @@ import json
 import logging
 import sys
 import uuid
+from dataclasses import dataclass
 from optparse import OptionParser
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+
+
+@dataclass
+class ConfigLocal:
+    debug_mode = True  # Режим отладки. True == режим отладки, False == нормальный режим.
+
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -37,36 +44,167 @@ GENDERS = {
 }
 
 
-class CharField(object):
+class BaseField:
+    # None must be in first position
+    _empty_values = (None, '', [], (), {},)
+    _type: object | None = str
+
+    def __init__(self,
+                 required: bool | None = False,
+                 nullable: bool | None = True, ) -> None:
+        self.required = required
+        self.nullable = nullable
+
+    @property
+    def value(self, ):
+        return self._value
+
+    @value.setter
+    def value(self, loc_val):
+        self._value = self._is_valid(loc_val)
+
+    def _is_valid(self, value) -> object | None:
+
+        if self.required and value in self._empty_values[0]:
+            str_error = f'The field {type(self).__name__} is required'
+            logging.exception(str_error)
+            raise ValueError()
+
+        if not self.nullable and value in self._empty_values:
+            raise ValueError('The field cannot be empty')
+
+        if not isinstance(value, self._type):
+            target_type = self._type.__str__().replace("<class ", "").replace(">", "")
+            str_error = f'The field type must be one of the specified type(s) {target_type}'
+            # str_error += f'\n{type(value)} not in {target_type}')  # Вариант для print
+            logging.exception(str_error)
+            raise ValueError(str_error)
+
+        if value not in self._empty_values:
+            result = self._is_valid_add(value)
+        else:
+            result = value
+
+        return result
+
+    def _is_valid_add(self, value):
+        return value
+
+    def __repr__(self):
+        a = {_: getattr(self, _) for _ in self.__dict__ if _[0] != '_'}
+        return f'<Class {self.__class__.__name__}: {a}>'
+
+
+class CharField(BaseField):
+    """строĸа"""
     pass
 
 
-class ArgumentsField(object):
-    pass
+class ArgumentsField(BaseField):
+    """словарь (объеĸт в терминах json)"""
+    _type = dict
 
 
 class EmailField(CharField):
-    pass
+    """строĸа, в ĸоторой есть @"""
+
+    def _is_valid_add(self, value):
+        if '@' not in value:
+            str_error = 'The field must contain an email. '
+            str_error += 'The string does not contain a character @'
+            logging.exception(str_error)
+            raise ValueError(str_error)
+        return value
 
 
-class PhoneField(object):
-    pass
+class PhoneField(BaseField):
+    """строĸа или число, длиной 11, начинается с 7"""
+    _type = (int, str)
+
+    def _is_valid_add(self, value):
+        if self.nullable:
+            if not str(value)[0] == '7':
+                str_error = f'The first character should be 7. {str(value)[0]} != 7'
+                # str_error += f'\n{str(value)}\n^') # Вариант для print
+                logging.exception(str_error)
+                raise ValueError(str_error)
+        if len(str(value)) != 11:
+            str_error = f'The length of the field must be 11 characters. {len(str(value))} != 11'
+            # str_error += f'\n{str(value)}\n{" " * 10}^-endpoint' # Вариант для print
+            logging.exception(str_error)
+            raise ValueError(str_error)
+
+        return value
 
 
-class DateField(object):
-    pass
+class DateField(BaseField):
+    """дата в формате DD.MM.YYYY"""
+    _type = datetime.date
+
+    def _is_valid_add(self, value):
+        try:
+            datetime.datetime.strptime(value, '%d.%m.%Y')
+        except ValueError:
+            str_error = 'The field values must be in the DD.MM.YYYY format'
+            logging.exception(str_error)
+            raise ValueError(str_error)
+
+        return value
 
 
-class BirthDayField(object):
-    pass
+class BirthDayField(DateField):
+    """
+    дата в формате DD.MM.YYYY, с ĸоторой прошло не больше 70 лет
+    ДОПОЛНИТЕЛЬНО: сделана проверка на нахождение даты дня рождения в будущем
+    """
+    _years_limit = 70
+
+    @staticmethod
+    def age(check_date: datetime.date, ) -> int:
+        today = datetime.date.today()
+        if today < check_date:
+            return 0
+        dob: datetime.date = check_date
+        years = today.year - dob.year
+        if today.month < dob.month or (today.month == dob.month and today.day < dob.day):
+            years -= 1
+        return years
+
+    def _is_valid_add(self, value: datetime.date, ):
+
+        super()._is_valid_add(value)
+
+        if self.age(value) > self._years_limit:
+            str_error = f'More than {self._years_limit} years have passed since {value}'
+            # str_error += f'\n{self.age(value)} > {self._years_limit}') # Вариант для print
+            logging.exception(str_error)
+            raise ValueError(str_error)
+        if value > datetime.date.today():
+            str_error = f'The date of the birthday is in the future:{value}'
+            # str_error += f'\n Today in {datetime.date.today()}') # Вариант для print
+            logging.exception(str_error)
+            raise ValueError(str_error)
+
+        return value
 
 
-class GenderField(object):
-    pass
+class GenderField(BaseField):
+    """число 0, 1 или 2"""
+    _type = int
+
+    def _is_valid_add(self, value):
+        if value not in GENDERS.keys():
+            str_error = f'The field can take the following values: {GENDERS.keys()}'
+            # str_error += f'\n{str(value)} not in {GENDERS.keys()}') # Вариант для print
+            logging.exception(str_error)
+            raise ValueError(str_error)
+
+        return value
 
 
-class ClientIDsField(object):
-    pass
+class ClientIDsField(BaseField):
+    """массив чисел"""
+    _type = list[int]
 
 
 # OK
@@ -136,6 +274,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
         response, code = {}, OK
         context = {"request_id": self.get_request_id(self.headers)}
         request = None
+        data_string: str | None = None
         try:
             data_string = self.rfile.read(int(self.headers['Content-Length']))
             request = json.loads(data_string)
@@ -182,8 +321,10 @@ if __name__ == "__main__":
     op.add_option("-p", "--port", action="store", type=int, default=8080)
     op.add_option("-l", "--log", action="store", default=None)
     (opts, args) = op.parse_args()
+
     logging.basicConfig(filename=opts.log, level=logging.INFO,
                         format='[%(asctime)s] %(levelname).1s %(message)s', datefmt='%Y.%m.%d %H:%M:%S')
+
     server = HTTPServer(("localhost", opts.port), MainHTTPHandler)
     logging.info("Starting server at %s" % opts.port)
     try:

@@ -26,53 +26,51 @@ class BaseField:
         self.value = self._is_valid(value=value, value_type=value_type)
 
     def _is_valid(self, value, value_type: object | None):
-        if not isinstance(value_type, tuple):
-            value_type = (value_type,)
-        value_validate = False
-        for t in value_type:
-            if isinstance(value, t):
-                value_validate = True
-        if not value_validate:
-            raise ValueError(f'The field type must be in {value_type}')
+
+        if not isinstance(value, value_type):
+            str_temp = value_type.__str__().replace("<class ", "").replace(">", "")
+            str_temp = f'The field type must be one of the specified type(s) {str_temp}'
+            raise ValueError(str_temp)
 
         if self.required and value is None:
             raise ValueError(f'The field {type(self).__name__} is required')
 
         if not self.nullable and value in ('', [], (), {}):
-            raise ValueError('The field should not be empty')
+            raise ValueError('The field cannot be empty')
 
-        return value
+        return self._is_valid_add(value)
+
+    def _is_valid_add(self, value):
+        pass
 
     def __repr__(self):
         attributes = {
             name: getattr(self, name)
             for name in self.__dict__
-            if name[0:1] != '_'
+            if name[0] != '_'
         }
         return f'<Class {self.__class__.__name__}: {attributes}>'
 
 
 class CharField(BaseField):
-    def __init__(self,
-                 value: object | None = None,
-                 required: bool | None = False,
-                 nullable: bool | None = True, ):
+    def __init__(self, value: object | None = None,
+                 required: bool | None = False, nullable: bool | None = True, ):
         super().__init__(value, required=required, nullable=nullable)
 
 
 class PhoneField(BaseField):
-    def __init__(self,
-                 value: object | None = None,
-                 required: bool | None = False,
-                 nullable: bool | None = True, ):
+    def __init__(self, value: object | None = None,
+                 required: bool | None = False, nullable: bool | None = True, ):
         super().__init__(value, value_type=(int, str), required=required, nullable=nullable)
 
-    def _is_valid(self, value, value_type):
-        super()._is_valid(value, value_type)
+    def _is_valid_add(self, value):
         if not str(value)[0] == '7':
-            raise ValueError(f'The field first symbol is {str(value)[0]} != 7')
+            str_temp = f'The first character should be 7. {str(value)[0]} != 7\n{str(value)}\n^'
+            raise ValueError(str_temp)
         if len(str(value)) != 11:
-            raise ValueError(f'The field length is {len(str(value))} != 11')
+            str_temp = f'The length of the field must be 11 characters. {len(str(value))} != 11'
+            str_temp += f'\n{str(value)}\n{"-" * 10}^'
+            raise ValueError(str_temp)
         return value
 
 
@@ -100,7 +98,8 @@ if __name__ == '__main__':
     print(f'__dir__:{temp.__dir__()}')
     print(f'__dict__:{temp.__dict__}')
 
-    temp_ph = PhoneField(value=79123456789, required=True)
+    temp_ph = PhoneField(value=7912345678, required=True)
     print(f'temp_ph: {temp_ph}')
+    print(type(str).__qualname__)
 
     pass
