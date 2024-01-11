@@ -7,6 +7,7 @@ import json
 import logging
 import sys
 import uuid
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from optparse import OptionParser
@@ -50,16 +51,22 @@ GENDERS = {
 }
 
 
-class BaseField:
-    # None must be in first position
-    _empty_values = (None, '', [], (), {},)
-    _type: object | None = str
+class ProtoField(ABC):
+    required: bool | None = False
+    nullable: bool | None = True
 
-    def __init__(self,
-                 required: bool | None = False,
-                 nullable: bool | None = True, ) -> None:
-        self.required = required
-        self.nullable = nullable
+    # None must be in first position
+    _empty_values: list = (None, '', [], (), {},)
+
+    _type: object | None = str
+    _value: object | None
+    _max_size: int = 256
+
+    # В этом коде не используется. Оставлено на будущее
+    error_messages = {
+        'optional': "Error",
+        'unexpected': "Unexpected error"
+    }
 
     @property
     def value(self, ):
@@ -68,6 +75,40 @@ class BaseField:
     @value.setter
     def value(self, loc_val):
         self._value = self._is_valid(loc_val)
+
+    @property
+    def type_name(self) -> str:
+        if self._type:
+            return self._type.__name__.replace("<class ", "").replace(">", "")
+        else:
+            return ""
+
+    @abstractmethod
+    def _is_valid(self, value) -> object | None:
+        # Оставлен код для демонстрации/подсказки подхода
+        if value not in self._empty_values:
+            result = self._is_valid_mixin(value)
+        else:
+            result = value
+        return result
+
+    @abstractmethod
+    def _is_valid_mixin(self, value):
+        return value
+
+    def __repr__(self):
+        a = {_: getattr(self, _) for _ in self.__dir__() if _[0] != '_'}
+        a.update({"type": self.type_name})
+        return f'<Class {self.__class__.__name__}: {a}>'
+
+
+class BaseField(ProtoField):
+
+    def __init__(self,
+                 required: bool | None = False,
+                 nullable: bool | None = True, ) -> None:
+        self.required = required
+        self.nullable = nullable
 
     def _is_valid(self, value) -> object | None:
 
@@ -79,26 +120,22 @@ class BaseField:
         if not self.nullable and value in self._empty_values:
             raise ValueError('The field cannot be empty')
 
-        if not isinstance(value, self._type):
-            target_type = self._type.__str__().replace("<class ", "").replace(">", "")
-            str_error = f'The field type must be one of the specified type(s) {target_type}'
-            # str_error += f'\n{type(value)} not in {target_type}')  # Вариант для print
-            logging.exception(str_error)
-            raise ValueError(str_error)
+        if self._type:
+            if not isinstance(value, self._type):
+                str_error = f'The field type must be one of the specified type(s) {self.type_name}'
+                # str_error += f'\n{type(value)} not in {target_type}')  # Вариант для print
+                logging.exception(str_error)
+                raise ValueError(str_error)
 
         if value not in self._empty_values:
-            result = self._is_valid_add(value)
+            result = self._is_valid_mixin(value)
         else:
             result = value
 
         return result
 
-    def _is_valid_add(self, value):
+    def _is_valid_mixin(self, value):
         return value
-
-    def __repr__(self):
-        a = {_: getattr(self, _) for _ in self.__dict__ if _[0] != '_'}
-        return f'<Class {self.__class__.__name__}: {a}>'
 
 
 class CharField(BaseField):
@@ -114,7 +151,7 @@ class ArgumentsField(BaseField):
 class EmailField(CharField):
     """строĸа, в ĸоторой есть @"""
 
-    def _is_valid_add(self, value):
+    def _is_valid_mixin(self, value):
         if '@' not in value:
             str_error = 'The field must contain an email. '
             str_error += 'The string does not contain a character @'
@@ -126,19 +163,23 @@ class EmailField(CharField):
 class PhoneField(BaseField):
     """строĸа или число, длиной 11, начинается с 7"""
     _type = (int, str)
+    _max_size: int = 11
 
-    def _is_valid_add(self, value):
+    def _is_valid_mixin(self, value):
         if self.nullable:
+
+            max_size = self._max_size
+            if len(str(value)) != max_size:
+                str_error = f'The length of the field must be 11 characters. {len(str(value))} != {max_size}'
+                # str_error += f'\n{str(value)}\n{" " * max_size-1}^-endpoint' # Вариант для print
+                logging.exception(str_error)
+                raise ValueError(str_error)
+
             if not str(value)[0] == '7':
-                str_error = f'The first character should be 7. {str(value)[0]} != 7'
+                str_error = f'The first character must be 7. {str(value)[0]} != 7'
                 # str_error += f'\n{str(value)}\n^') # Вариант для print
                 logging.exception(str_error)
                 raise ValueError(str_error)
-        if len(str(value)) != 11:
-            str_error = f'The length of the field must be 11 characters. {len(str(value))} != 11'
-            # str_error += f'\n{str(value)}\n{" " * 10}^-endpoint' # Вариант для print
-            logging.exception(str_error)
-            raise ValueError(str_error)
 
         return value
 
@@ -147,7 +188,7 @@ class DateField(BaseField):
     """дата в формате DD.MM.YYYY"""
     _type = datetime.date
 
-    def _is_valid_add(self, value):
+    def _is_valid_mixin(self, value):
         try:
             datetime.datetime.strptime(value, '%d.%m.%Y')
         except ValueError:
@@ -176,9 +217,9 @@ class BirthDayField(DateField):
             years -= 1
         return years
 
-    def _is_valid_add(self, value: datetime.date, ):
+    def _is_valid_mixin(self, value: datetime.date, ):
 
-        super()._is_valid_add(value)
+        super()._is_valid_mixin(value)
 
         if self.age(value) > self._years_limit:
             str_error = f'More than {self._years_limit} years have passed since {value}'
@@ -198,7 +239,7 @@ class GenderField(BaseField):
     """число 0, 1 или 2"""
     _type = int
 
-    def _is_valid_add(self, value):
+    def _is_valid_mixin(self, value):
         if value not in GENDERS.keys():
             str_error = f'The field can take the following values: {GENDERS.keys()}'
             # str_error += f'\n{str(value)} not in {GENDERS.keys()}') # Вариант для print
@@ -211,6 +252,14 @@ class GenderField(BaseField):
 class ClientIDsField(BaseField):
     """массив чисел"""
     _type = list[int]
+
+
+class MetaRequest(type):
+    def __call__(self, *args, **kwargs):
+        self.fields = [
+            f for f in self.__dict__ if isinstance(self.__dict__.get(f), BaseField)
+        ]
+        return super().__call__(*args, **kwargs)
 
 
 # OK
