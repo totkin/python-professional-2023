@@ -7,7 +7,7 @@ import json
 import logging
 import sys
 import uuid
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, ABCMeta
 from dataclasses import dataclass
 
 from optparse import OptionParser
@@ -51,30 +51,32 @@ GENDERS = {
 }
 
 
+class ValidationError(Exception):
+    pass
+
+
 class ProtoField(ABC):
     required: bool | None = False
     nullable: bool | None = True
+    value: object | None
+
+    max_size: int = 256
+
+    error_messages = {}
+    error_exception: bool = True  # True - raise Exception, False - add to error_messages
 
     # None must be in first position
     _empty_values: list = (None, '', [], (), {},)
-
     _type: object | None = str
-    _value: object | None
-    _max_size: int = 256
-
-    # В этом коде не используется. Оставлено на будущее
-    error_messages = {
-        'optional': "Error",
-        'unexpected': "Unexpected error"
-    }
 
     @property
-    def value(self, ):
-        return self._value
+    def value_validate(self, ):
+        return self.value
 
-    @value.setter
-    def value(self, loc_val):
-        self._value = self._is_valid(loc_val)
+    @value_validate.setter
+    def value_validate(self, loc_val):
+        if self.is_valid:
+            self.value = loc_val
 
     @property
     def type_name(self) -> str:
@@ -83,18 +85,16 @@ class ProtoField(ABC):
         else:
             return ""
 
-    @abstractmethod
-    def _is_valid(self, value) -> object | None:
-        # Оставлен код для демонстрации/подсказки подхода
-        if value not in self._empty_values:
-            result = self._is_valid_mixin(value)
+    @property
+    def is_valid(self) -> bool | None:
+        if self.value not in self._empty_values:
+            return self._is_valid_mixin
         else:
-            result = value
-        return result
+            return True
 
-    @abstractmethod
-    def _is_valid_mixin(self, value):
-        return value
+    @property
+    def _is_valid_mixin(self, ):
+        return True
 
     def __repr__(self):
         a = {_: getattr(self, _) for _ in self.__dir__() if _[0] != '_'}
@@ -110,32 +110,36 @@ class BaseField(ProtoField):
         self.required = required
         self.nullable = nullable
 
-    def _is_valid(self, value) -> object | None:
-
+    def is_valid(self) -> bool | None:
+        value = self.value
         if self.required and value in self._empty_values[0]:
             str_error = f'The field {type(self).__name__} is required'
-            logging.exception(str_error)
-            raise ValueError()
+            if self.error_exception:
+                logging.exception(str_error)
+                raise ValueError(str_error)
+            else:
+                self.error_messages.update({'required': str_error})
 
         if not self.nullable and value in self._empty_values:
-            raise ValueError('The field cannot be empty')
+            str_error = 'The field cannot be empty'
+            if self.error_exception:
+                logging.exception(str_error)
+                raise ValueError(str_error)
+            else:
+                self.error_messages.update({'nullable': str_error})
 
         if self._type:
             if not isinstance(value, self._type):
                 str_error = f'The field type must be one of the specified type(s) {self.type_name}'
                 # str_error += f'\n{type(value)} not in {target_type}')  # Вариант для print
-                logging.exception(str_error)
-                raise ValueError(str_error)
+                if self.error_exception:
+                    logging.exception(str_error)
+                    raise TypeError(str_error)
+                else:
+                    self.error_messages.update({'invalid_type': str_error})
+                    return False
 
-        if value not in self._empty_values:
-            result = self._is_valid_mixin(value)
-        else:
-            result = value
-
-        return result
-
-    def _is_valid_mixin(self, value):
-        return value
+        return super().is_valid
 
 
 class CharField(BaseField):
@@ -151,13 +155,18 @@ class ArgumentsField(BaseField):
 class EmailField(CharField):
     """строĸа, в ĸоторой есть @"""
 
-    def _is_valid_mixin(self, value):
-        if '@' not in value:
+    def _is_valid_mixin(self, ):
+        value = self.value
+        if '@' not in value and value not in self._empty_values:
             str_error = 'The field must contain an email. '
             str_error += 'The string does not contain a character @'
-            logging.exception(str_error)
-            raise ValueError(str_error)
-        return value
+            if self.error_exception:
+                logging.exception(str_error)
+                raise ValueError(str_error)
+            else:
+                self.error_messages.update({'invalid_mixin': str_error})
+                return False
+        return True
 
 
 class PhoneField(BaseField):
@@ -165,38 +174,52 @@ class PhoneField(BaseField):
     _type = (int, str)
     _max_size: int = 11
 
-    def _is_valid_mixin(self, value):
-        if self.nullable:
-
+    def _is_valid_mixin(self, ):
+        value = self.value
+        if value not in self._empty_values:
             max_size = self._max_size
+            self.error_messages.update({'invalid_mixin': ()})
             if len(str(value)) != max_size:
-                str_error = f'The length of the field must be 11 characters. {len(str(value))} != {max_size}'
+                str_error = f'The length of the field must be {max_size} characters. {len(str(value))} != {max_size}'
                 # str_error += f'\n{str(value)}\n{" " * max_size-1}^-endpoint' # Вариант для print
-                logging.exception(str_error)
-                raise ValueError(str_error)
+                if self.error_exception:
+                    logging.exception(str_error)
+                    raise ValueError(str_error)
+                else:
+                    self.error_messages['invalid_mixin'].append(str_error)
+                    return False
 
             if not str(value)[0] == '7':
                 str_error = f'The first character must be 7. {str(value)[0]} != 7'
                 # str_error += f'\n{str(value)}\n^') # Вариант для print
-                logging.exception(str_error)
-                raise ValueError(str_error)
+                if self.error_exception:
+                    logging.exception(str_error)
+                    raise ValueError(str_error)
+                else:
+                    self.error_messages['invalid_mixin'].append(str_error)
+                    return False
 
-        return value
+        return True
 
 
 class DateField(BaseField):
     """дата в формате DD.MM.YYYY"""
     _type = datetime.date
 
-    def _is_valid_mixin(self, value):
+    def _is_valid_mixin(self, ):
+        value = self.value
         try:
             datetime.datetime.strptime(value, '%d.%m.%Y')
         except ValueError:
             str_error = 'The field values must be in the DD.MM.YYYY format'
-            logging.exception(str_error)
-            raise ValueError(str_error)
+            if self.error_exception:
+                logging.exception(str_error)
+                raise ValueError(str_error)
+            else:
+                self.error_messages.update({'invalid_mixin': str_error})
+                return False
 
-        return value
+        return True
 
 
 class BirthDayField(DateField):
@@ -204,7 +227,7 @@ class BirthDayField(DateField):
     дата в формате DD.MM.YYYY, с ĸоторой прошло не больше 70 лет
     ДОПОЛНИТЕЛЬНО: сделана проверка на нахождение даты дня рождения в будущем
     """
-    _years_limit = 70
+    _years_limit = 70  # если значение меньше или равно 0 проверка выполняться не будет
 
     @staticmethod
     def age(check_date: datetime.date, ) -> int:
@@ -217,36 +240,60 @@ class BirthDayField(DateField):
             years -= 1
         return years
 
-    def _is_valid_mixin(self, value: datetime.date, ):
+    def _is_valid_mixin(self, ):
+        result = super()._is_valid_mixin
 
-        super()._is_valid_mixin(value)
+        if result:
+            try:
+                value = self.value
+                if self.age(value) > self._years_limit:
+                    str_error = f'More than {self._years_limit} years have passed since {value}'
+                    # str_error += f'\n{self.age(value)} > {self._years_limit}') # Вариант для print
+                    if self.error_exception:
+                        logging.exception(str_error)
+                        raise ValueError(str_error)
+                    else:
+                        self.error_messages.update({'invalid_mixin': str_error})
+                        return False
 
-        if self.age(value) > self._years_limit:
-            str_error = f'More than {self._years_limit} years have passed since {value}'
-            # str_error += f'\n{self.age(value)} > {self._years_limit}') # Вариант для print
-            logging.exception(str_error)
-            raise ValueError(str_error)
-        if value > datetime.date.today():
-            str_error = f'The date of the birthday is in the future:{value}'
-            # str_error += f'\n Today in {datetime.date.today()}') # Вариант для print
-            logging.exception(str_error)
-            raise ValueError(str_error)
-
-        return value
+                if self._years_limit > 0 and value > datetime.date.today():
+                    str_error = f'The date of the birthday is in the future:{value}'
+                    # str_error += f'\n Today in {datetime.date.today()}') # Вариант для print
+                    if self.error_exception:
+                        logging.exception(str_error)
+                        raise ValueError(str_error)
+                    else:
+                        self.error_messages.update({'invalid_mixin': str_error})
+                        return False
+                return True
+            except ValueError as error:
+                if self.error_exception:
+                    logging.exception(error)
+                    raise ValueError(error)
+                else:
+                    self.error_messages.update({'invalid_mixin': error})
+                    return False
+        else:
+            return result
 
 
 class GenderField(BaseField):
     """число 0, 1 или 2"""
     _type = int
+    _genders = GENDERS.keys()
 
     def _is_valid_mixin(self, value):
-        if value not in GENDERS.keys():
-            str_error = f'The field can take the following values: {GENDERS.keys()}'
+        if value not in self._genders:
+            str_error = f'The field can take the following values: {self._genders}'
             # str_error += f'\n{str(value)} not in {GENDERS.keys()}') # Вариант для print
-            logging.exception(str_error)
-            raise ValueError(str_error)
+            if self.error_exception:
+                logging.exception(str_error)
+                raise ValueError(str_error)
+            else:
+                self.error_messages.update({'invalid_mixin': str_error})
+                return False
 
-        return value
+        return True
 
 
 class ClientIDsField(BaseField):
@@ -255,21 +302,48 @@ class ClientIDsField(BaseField):
 
 
 class MetaRequest(type):
-    def __call__(self, *args, **kwargs):
-        self.fields = [
-            f for f in self.__dict__ if isinstance(self.__dict__.get(f), BaseField)
-        ]
-        return super().__call__(*args, **kwargs)
+    field_classes: dict = {}
+
+    def __new__(mcls, name, bases, attrs):
+        for key, value in attrs.items():
+            if isinstance(value, BaseField):
+                mcls.field_classes[key] = value
+        return type.__new__(mcls, name, bases, attrs)
+
+
+class BaseRequest(metaclass=MetaRequest):
+    field_classes: dict = {}
+    error_messages = {}
+    error_exception: bool = False  # True - raise Exception, False - add to error_messages
+
+    def validate(self, ):
+        for attribute, field in self.field_classes.items():
+            value = getattr(self, attribute)
+            if value is not None or field.required:
+                field.validate(value)
+            value.error_exception = self.error_exception
+            self.error_messages[value] = value.error_messages
+
+    def is_valid(self, ):
+
+        for field_name, field_cls in self.field_classes.items():
+            field_value = getattr(self, field_name, None)
+
+            # Validate field value
+            try:
+                field_cls.validate(field_value)
+            except (TypeError, ValueError) as ex:
+                self.error_messages[field_name] = str(ex)
 
 
 # OK
-class ClientsInterestsRequest(object):
+class ClientsInterestsRequest(BaseRequest):
     client_ids = ClientIDsField(required=True)
     date = DateField(required=False, nullable=True)
 
 
-# OK - ???
-class OnlineScoreRequest(object):
+# OK
+class OnlineScoreRequest(BaseRequest):
     first_name = CharField(required=False, nullable=True)
     last_name = CharField(required=False, nullable=True)
     email = EmailField(required=False, nullable=True)
@@ -277,9 +351,29 @@ class OnlineScoreRequest(object):
     birthday = BirthDayField(required=False, nullable=True)
     gender = GenderField(required=False, nullable=True)
 
+    def validate(self):
+        super().validate()
+
+        def is_valid_pair(a, b):
+            return a is not None and b is not None
+
+        any_pair_valid = any(
+            (
+                is_valid_pair(self.phone, self.email),
+                is_valid_pair(self.first_name, self.last_name),
+                is_valid_pair(self.gender, self.birthday),
+            )
+        )
+        if any_pair_valid:
+            return
+
+        str_error = ("The request must contain one of the specified pairs:" +
+                     "(phone/email , first_name/last_name , gender/birthday))")
+        raise ValidationError(str_error)
+
 
 # OK
-class MethodRequest(object):
+class MethodRequest(BaseRequest):
     account = CharField(required=False, nullable=True)
     login = CharField(required=True, nullable=True)
     token = CharField(required=True, nullable=True)

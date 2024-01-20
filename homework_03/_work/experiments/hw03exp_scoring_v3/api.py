@@ -167,7 +167,7 @@ class RequestMeta(type):
 class BaseRequest(metaclass=RequestMeta):
     fields = ()
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         for field in self.fields:
             setattr(self, field, kwargs.get(field))
 
