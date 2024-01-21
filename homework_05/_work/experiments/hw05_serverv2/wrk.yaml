@@ -1,0 +1,8 @@
+benchmarks:
+  - url: http://localhost:9999/dir2/
+    threads: 50            # threads count
+    concurrency: 100       # concurrent users
+    duration: 30           # test duration in seconds
+
+stores:
+  - json
