@@ -24,7 +24,9 @@ jobs:
 
       - name: Run flake
         run: |
+          cd homework_03
           flake8 --config .flake8
       - name: Run unittest
         run: |
+          cd homework_03
           python -m unittest
