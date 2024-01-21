@@ -38,26 +38,16 @@ GENDERS = {
 }
 
 
-class ValidationError(Exception):
-    pass
+ValidationError = ValueError
 
 
 class BaseField:
     required: bool
     nullable: bool
-    error_exception: bool = True  # True - raise Exception, False - add to error_messages
 
-    # None must be in first position
-    _empty_values: list = (None, '', [], (), {},)
-
-    def __init__(self,
-                 required: bool | None = False,
-                 nullable: bool | None = True, ):
+    def __init__(self, required: bool, nullable: bool):
         if not required and not nullable:
-            str_error = "Optional field must be nullable"
-            if self.error_exception:
-                logging.exception(str_error)
-                raise ValueError(str_error)
+            raise ValueError("Optional field must be nullable")
         self.required = required
         self.nullable = nullable
 
@@ -68,52 +58,43 @@ class BaseField:
     def __get__(self, instance, owner):
         return getattr(instance, self._private_name)
 
+    def _validate(self, field_value):
+        if not self.nullable and field_value is None:
+            raise ValidationError(
+                f'Field "{self._name}" is not nullable but is set to null or not provided in request'
+            )
+        return field_value
+
     def __set__(self, instance, value):
-        setattr(instance, self._private_name, self.valid_value(value))
-
-    def valid_value(self, value_candidate):
-        if not self.nullable and value_candidate is None:
-            str_error = f'Field "{self._name}" is not nullable but is set to null or not provided in request'
-            if self.error_exception:
-                logging.exception(str_error)
-                raise ValidationError(str_error)
-
-        if self.required and value_candidate is self._empty_values[0]:
-            str_error = f'Field {type(self).__name__} is required'
-            if self.error_exception:
-                logging.exception(str_error)
-                raise ValidationError(str_error)
-
-        return value_candidate
+        setattr(instance, self._private_name, self._validate(value))
 
 
 class CharField(BaseField):
-
-    def valid_value(self, value) -> str | None:
-        value = super().valid_value(value)
+    def _validate(self, field_value) -> Optional[str]:
+        value = super()._validate(field_value)
         if value is not None and not isinstance(value, str):
-            str_error = f'"{json.dumps(value)}" is not a valid value for field "{self._name}"; '
-            str_error += f'reason: string is expected but object of type {type(value).__name__} received'
-            raise ValidationError(str_error)
+            raise ValidationError(
+                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
+                f'reason: string is expected but object of type {type(field_value).__name__} received'
+            )
         return value
 
 
 class ArgumentsField(BaseField):
-
-    def valid_value(self, field_value) -> dict[str, any]:
-        value = super().valid_value(field_value)
+    def _validate(self, field_value) -> dict[str, any]:
+        value = super()._validate(field_value)
         if value is None:
             return {}
 
         if not isinstance(value, dict):
             raise ValidationError(
                 f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: JSON object expected but object of type {type(value).__name__} received'
+                f'reason: JSON object expected but object of type {type(field_value).__name__} received'
             )
 
         if not all(isinstance(key, str) for key in value):
             raise ValidationError(
-                f'JSON object "{json.dumps(value)}" is not a valid value for field "{self._name}"; '
+                f'JSON object "{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
                 f'reason: all keys of method arguments object must be strings'
             )
 
@@ -121,9 +102,8 @@ class ArgumentsField(BaseField):
 
 
 class EmailField(CharField):
-
-    def valid_value(self, field_value) -> str | None:
-        value = super().valid_value(field_value)
+    def _validate(self, field_value) -> Optional[str]:
+        value = super()._validate(field_value)
         if value is None:
             return
 
@@ -140,12 +120,12 @@ class PhoneField(BaseField):
     PHONE_LENGTH = 11
     PHONE_CODE = '7'
 
-    def valid_value(self, field_value) -> str | None:
-        value = super().valid_value(field_value)
+    def _validate(self, field_value) -> Optional[str]:
+        value = super()._validate(field_value)
         if value is None:
             return
 
-        if not isinstance(value, (str, int)):
+        if not isinstance(value, (int, str)):
             raise ValidationError(
                 f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
                 f'reason: phone number must be either string or number '
@@ -170,10 +150,9 @@ class PhoneField(BaseField):
         return value
 
 
-class DateField(BaseField):
-
-    def valid_value(self, field_value) -> datetime.datetime | None:
-        value = super().valid_value(field_value)
+class DateField(CharField):
+    def _validate(self, field_value) -> Optional[datetime.datetime]:
+        value = super()._validate(field_value)
         if value is None:
             return
 
@@ -191,8 +170,8 @@ class DateField(BaseField):
 class BirthDayField(DateField):
     MAX_AGE = 70
 
-    def valid_value(self, field_value) -> datetime.datetime | None:
-        value = super().valid_value(field_value)
+    def _validate(self, field_value) -> Optional[datetime.datetime]:
+        value = super()._validate(field_value)
         if value is None:
             return
 
@@ -215,10 +194,10 @@ class BirthDayField(DateField):
 
 
 class GenderField(BaseField):
-    VALID_GENDERS = GENDERS.keys()
+    VALID_GENDERS = [MALE, FEMALE, UNKNOWN]
 
-    def valid_value(self, field_value) -> int | None:
-        value = super().valid_value(field_value)
+    def _validate(self, field_value) -> Optional[int]:
+        value = super()._validate(field_value)
         if value is None:
             return
 
@@ -232,13 +211,11 @@ class GenderField(BaseField):
 
 
 class ClientIDsField(BaseField):
-    _type = (list[int],)
-
     def __init__(self, required: bool):
         super().__init__(required, nullable=False)
 
-    def valid_value(self, field_value) -> list[int]:
-        value = super().valid_value(field_value)
+    def _validate(self, field_value) -> list[int]:
+        value = super()._validate(field_value)
 
         if not isinstance(value, list):
             raise ValidationError(
@@ -275,8 +252,8 @@ class RequestFieldMetaclass(type):
                     field.__set__(self, field_value)
                     self._field_names.append(field_name)
 
-            if hasattr(self, 'valid_value'):
-                self.valid_value()
+            if hasattr(self, '_validate'):
+                self._validate()
 
         return super().__new__(mcs, name, bases, {**dct, '__init__': init})
 
@@ -299,11 +276,11 @@ class OnlineScoreRequest(BaseRequest):
     birthday = BirthDayField(required=False, nullable=True)
     gender = GenderField(required=False, nullable=True)
 
-    def valid_value(self):
+    def _validate(self):
         if (
-                (self.first_name is None or self.last_name is None)
-                and (self.email is None or self.phone is None)
-                and (self.birthday is None or self.gender is None)
+            (self.first_name is None or self.last_name is None)
+            and (self.email is None or self.phone is None)
+            and (self.birthday is None or self.gender is None)
         ):
             raise ValidationError("Not enough data provided")
 

@@ -11,7 +11,6 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import re
 from scoring import get_score, get_interests
 
-
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
 ADMIN_SALT = "42"
@@ -66,7 +65,7 @@ class Field(object):
 
     def check_validation(self, value):
         if (value is None and not self.required) or (
-            self.nullable and value in self.empty_values
+                self.nullable and value in self.empty_values
         ):
             return
         if value is None and self.required:
@@ -74,6 +73,8 @@ class Field(object):
         if not self.nullable and value in self.empty_values:
             raise ValidationError("Value cannot be empty")
         self.validate(value)
+
+    # def __str
 
 
 class CharField(Field):
@@ -106,7 +107,7 @@ class PhoneField(Field):
 
     def validate(self, value):
         if not isinstance(value, (str, int)) or not re.match(
-            r"^7[0-9]{10}", str(value)
+                r"^7[0-9]{10}", str(value)
         ):
             raise ValidationError("Value must be a valid phone number")
 
@@ -149,8 +150,8 @@ class ClientIDsField(Field):
 
     def validate(self, value):
         is_valid = (
-            isinstance(value, list)
-            and all(isinstance(i, int) for i in value)
+                isinstance(value, list)
+                and all(isinstance(i, int) for i in value)
         )
         if not is_valid:
             raise ValidationError("Value must be a list of integers")
@@ -235,14 +236,12 @@ class MethodRequest(BaseRequest):
 
 
 def check_auth(request):
-    login = request.login or ""
-    account = request.account or ""
     if request.is_admin:
-        digest = hashlib.sha512(
-            (datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).encode("utf-8")
-        ).hexdigest()
+        str_request = datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT
+        digest = hashlib.sha512(str_request.encode('utf-8')).hexdigest()
     else:
-        digest = hashlib.sha512((account + login + SALT).encode("utf-8")).hexdigest()
+        str_request = str(request.account) + str(request.login) + str(SALT)
+        digest = hashlib.sha512(str_request.encode('utf-8')).hexdigest()
     if digest == request.token:
         return True
     return False
@@ -307,7 +306,7 @@ def method_handler(request, ctx, store):
             arguments = method_request.arguments
 
         if method_request.method == "online_score":
-            return online_score_handler(method_request, arguments, ctx, store)
+            return online_score_handler(method_request,ctx, store)
         if method_request.method == "clients_interests":
             return clients_interests_handler(arguments, ctx, store)
     except ValidationError as errors:
