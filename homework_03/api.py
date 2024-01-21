@@ -8,7 +8,6 @@ import logging
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from optparse import OptionParser
-from typing import Optional
 
 from scoring import get_interests, get_score
 
@@ -28,6 +27,7 @@ ERRORS = {
     INVALID_REQUEST: "Invalid Request",
     INTERNAL_ERROR: "Internal Server Error",
 }
+
 UNKNOWN = 0
 MALE = 1
 FEMALE = 2
@@ -45,10 +45,12 @@ class ValidationError(Exception):
 class BaseField:
     required: bool
     nullable: bool
+
+    error_messages = {}
     error_exception: bool = True  # True - raise Exception, False - add to error_messages
 
     # None must be in first position
-    _empty_values: list = (None, '', [], (), {},)
+    _null_values: list = (None, '', [], (), {},)
 
     def __init__(self,
                  required: bool | None = False,
@@ -75,14 +77,18 @@ class BaseField:
         if not self.nullable and value_candidate is None:
             str_error = f'Field "{self._name}" is not nullable but is set to null or not provided in request'
             if self.error_exception:
-                logging.exception(str_error)
                 raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'nullable': str_error})
 
-        if self.required and value_candidate is self._empty_values[0]:
+        if self.required and value_candidate is self._null_values[0]:
             str_error = f'Field {type(self).__name__} is required'
             if self.error_exception:
-                logging.exception(str_error)
                 raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'required': str_error})
 
         return value_candidate
 
@@ -91,10 +97,16 @@ class CharField(BaseField):
 
     def valid_value(self, value) -> str | None:
         value = super().valid_value(value)
+        if value in self._null_values:
+            return value
+
         if value is not None and not isinstance(value, str):
-            str_error = f'"{json.dumps(value)}" is not a valid value for field "{self._name}"; '
-            str_error += f'reason: string is expected but object of type {type(value).__name__} received'
-            raise ValidationError(str_error)
+            str_error = f'Validation Error: string is expected but object of type {type(value).__name__} received'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
         return value
 
 
@@ -102,20 +114,25 @@ class ArgumentsField(BaseField):
 
     def valid_value(self, field_value) -> dict[str, any]:
         value = super().valid_value(field_value)
-        if value is None:
+
+        if value in self._null_values:
             return {}
 
         if not isinstance(value, dict):
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: JSON object expected but object of type {type(value).__name__} received'
-            )
+            str_error = f'Validation Error: JSON object expected but object of type {type(value).__name__} received'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         if not all(isinstance(key, str) for key in value):
-            raise ValidationError(
-                f'JSON object "{json.dumps(value)}" is not a valid value for field "{self._name}"; '
-                f'reason: all keys of method arguments object must be strings'
-            )
+            str_error = 'Validation Error: all keys of method arguments object must be strings'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         return value
 
@@ -124,14 +141,16 @@ class EmailField(CharField):
 
     def valid_value(self, field_value) -> str | None:
         value = super().valid_value(field_value)
-        if value is None:
-            return
+        if value in self._null_values:
+            return value
 
         if '@' not in value:
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: e-mail address must contain \'@\' symbol'
-            )
+            str_error = 'Validation Error: The string does not contain a character "@"'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         return value
 
@@ -142,30 +161,36 @@ class PhoneField(BaseField):
 
     def valid_value(self, field_value) -> str | None:
         value = super().valid_value(field_value)
-        if value is None:
-            return
+        if value in self._null_values:
+            return value
 
         if not isinstance(value, (str, int)):
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: phone number must be either string or number '
-                f'but object of type {type(field_value).__name__} received'
-            )
+            str_error = 'Validation Error:'
+            str_error += f'string or number is expected but object of type {type(value).__name__} received'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         value = str(value)
 
         if len(value) != self.PHONE_LENGTH:
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: phone number must contain {self.PHONE_LENGTH} digits '
-                f'but "{json.dumps(field_value)}" contains {len(value)}'
-            )
+            str_error = 'Validation Error: the length of the field must be {self.PHONE_LENGTH} characters.'
+            str_error += f' {len(str(value))} != {self.PHONE_LENGTH}'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         if self.PHONE_LENGTH > 0 and value[0] != self.PHONE_CODE:
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: phone number must start with code {self.PHONE_CODE}'
-            )
+            str_error = f'Validation Error: The first character must be {str(value)[0]}. {str(value)[0]} != 7'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         return value
 
@@ -174,16 +199,18 @@ class DateField(BaseField):
 
     def valid_value(self, field_value) -> datetime.datetime | None:
         value = super().valid_value(field_value)
-        if value is None:
-            return
+        if value in self._null_values:
+            return value
 
         try:
             value = datetime.datetime.strptime(value, "%d.%m.%Y")
         except ValueError:
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: "{json.dumps(field_value)}" is not a valid date in DD.MM.YYYY format'
-            ) from None
+            str_error = 'Validation Error: The field values must be in the DD.MM.YYYY format'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         return value
 
@@ -191,25 +218,32 @@ class DateField(BaseField):
 class BirthDayField(DateField):
     MAX_AGE = 70
 
+    def age(self, value):
+        value = datetime.datetime.strptime(value, "%d.%m.%Y")
+        today = datetime.datetime.today()
+        result = int(today.year - value.year - ((today.month, today.day) < (value.month, value.day)))
+        return result
+
     def valid_value(self, field_value) -> datetime.datetime | None:
         value = super().valid_value(field_value)
-        if value is None:
-            return
+        if value in self._null_values:
+            return value
 
-        today = datetime.datetime.today()
-        age = int(today.year - value.year - ((today.month, today.day) < (value.month, value.day)))
+        age = self.age(field_value)
         if age < 0:
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: maximum accepted age is {self.MAX_AGE} year(s) '
-                f'but birth date of "{json.dumps(field_value)}" suggests negative age'
-            )
+            str_error = f'Validation Error: the date of the birthday is in the future:{field_value}'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
         if age > self.MAX_AGE:
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: maximum accepted age is {self.MAX_AGE} year(s) '
-                f'but birth date of "{json.dumps(field_value)}" suggests age of {age} year(s)'
-            )
+            str_error = f'Validation Error: maximum accepted age is {self.MAX_AGE} year(s)'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         return value
 
@@ -219,20 +253,21 @@ class GenderField(BaseField):
 
     def valid_value(self, field_value) -> int | None:
         value = super().valid_value(field_value)
-        if value is None:
-            return
+        if value in self._null_values:
+            return value
 
         if value not in self.VALID_GENDERS:
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: gender must be one of the following values: ' + ", ".join(map(str, self.VALID_GENDERS))
-            )
+            str_error = f'Validation Error: the field can take the following values: {self.VALID_GENDERS}'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         return field_value
 
 
 class ClientIDsField(BaseField):
-    _type = (list[int],)
 
     def __init__(self, required: bool):
         super().__init__(required, nullable=False)
@@ -241,49 +276,50 @@ class ClientIDsField(BaseField):
         value = super().valid_value(field_value)
 
         if not isinstance(value, list):
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: client IDs must be a list of integers '
-                f'but object of type {type(field_value).__name__} received'
-            )
+            str_error = 'Validation Error: client IDs must be a list of integers'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
         if len(value) == 0:
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: client IDs list must not be empty'
-            )
+            str_error = 'Validation Error: client IDs list must not be empty'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
         if not all(isinstance(client_id, int) for client_id in value):
-            raise ValidationError(
-                f'"{json.dumps(field_value)}" is not a valid value for field "{self._name}"; '
-                f'reason: client IDs must be a list of integers '
-                f'but some of list elements are not integers'
-            )
+            str_error = 'Validation Error: client IDs must be a list of integers'
+            if self.error_exception:
+                raise ValidationError(str_error)
+            else:
+                logging.exception(str_error)
+                self.error_messages.update({'type': str_error})
 
         return value
 
 
-class RequestFieldMetaclass(type):
-    def __new__(mcs, name, bases, dct):
+class MetaRequest(type):
+    def __new__(mcs, class_name, parents, attributes):
         def init(self, request: dict):
             self._field_names = []
-            for field_name, field in dct.items():
+            for field_name, field in attributes.items():
                 if isinstance(field, BaseField):
                     if field_name not in request and field.required:
-                        raise ValidationError(
-                            f'Field "{field_name}" is required but not provided in request'
-                        )
+                        raise ValidationError(f'Field "{field_name}" is required but not provided in request')
                     field_value = request.get(field_name)
                     field.__set__(self, field_value)
                     self._field_names.append(field_name)
 
-            if hasattr(self, 'valid_value'):
-                self.valid_value()
+            if hasattr(self, 'validate_values'):
+                self.validate_values()
 
-        return super().__new__(mcs, name, bases, {**dct, '__init__': init})
+        return super().__new__(mcs, class_name, parents, {**attributes, '__init__': init})
 
 
-class BaseRequest(metaclass=RequestFieldMetaclass):
-    def __init__(self, request: dict):
-        pass
+class BaseRequest(metaclass=MetaRequest):
+    pass
 
 
 class ClientsInterestsRequest(BaseRequest):
@@ -299,7 +335,7 @@ class OnlineScoreRequest(BaseRequest):
     birthday = BirthDayField(required=False, nullable=True)
     gender = GenderField(required=False, nullable=True)
 
-    def valid_value(self):
+    def validate_values(self):
         if (
                 (self.first_name is None or self.last_name is None)
                 and (self.email is None or self.phone is None)
@@ -320,11 +356,13 @@ class MethodRequest(BaseRequest):
         return self.login == ADMIN_LOGIN
 
 
-def check_auth(request: MethodRequest):
+def check_auth(request):
     if request.is_admin:
-        digest = hashlib.sha512((datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).encode()).hexdigest()
+        str_request = datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT
+        digest = hashlib.sha512(str_request.encode('utf-8')).hexdigest()
     else:
-        digest = hashlib.sha512((request.account + request.login + SALT).encode()).hexdigest()
+        str_request = str(request.account) + str(request.login) + str(SALT)
+        digest = hashlib.sha512(str_request.encode('utf-8')).hexdigest()
     if digest == request.token:
         return True
     return False
