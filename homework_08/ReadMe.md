@@ -13,7 +13,7 @@ homework_08
 
 ```
 
-[Ссылка на файл с домашней работой]((homework-08.ipynb))
+[Ссылка на файл с домашней работой](homework-08.ipynb)
 
 ### Open Data Analysis (опционально)
 <hr>
