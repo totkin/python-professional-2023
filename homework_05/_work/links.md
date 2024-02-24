@@ -1,2 +1,0 @@
-- [Python. Давайте создадим простой HTTP-сервер](https://andreyex.ru/python-3/python-davajte-sozdadim-prostoj-http-server/) 2020 год
-- 
