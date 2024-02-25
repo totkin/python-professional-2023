@@ -1,0 +1,40 @@
+DEFAULT:
+  IP: 0.0.0.0
+  PORT: 9999
+  WORKERS: 3
+  LOGFILE: null
+  DOCUMENT_ROOT: 'tests/httptest'  # 'tests'
+
+  SERVER_NAME: test-server
+  BUFFER_SIZE: 1024
+  LOG_LEVEL: WARNING
+  METHODS: 'GET|HEAD'
+
+  CODE:
+    OK: 200
+    BAD_REQUEST: 400
+    FORBIDDEN: 403
+    NOT_FOUND: 404
+    NOT_ALLOWED: 405
+    INVALID_REQUEST: 422
+    INTERNAL_ERROR: 500
+
+  ERRORS:
+    OK: 'OK'
+    BAD_REQUEST: 'Bad Request'
+    FORBIDDEN: 'Forbidden'
+    NOT_FOUND: 'Not Found'
+    NOT_ALLOWED: 'Method Not Allowed'
+    INVALID_REQUEST: 'Invalid Request'
+    INTERNAL_ERROR: 'Internal Server Error'
+
+  MIME_TYPES:
+    html: 'text/html'
+    txt: 'text/text'
+    css: 'text/css'
+    js: 'text/javascript'
+    jpg: 'image/jpeg'
+    jpeg: 'image/jpeg'
+    png: 'image/png'
+    gif: 'image/gif'
+    swf: 'application/x-shockwave-flash'

@@ -15,6 +15,14 @@ homework_08
 
 [Ссылка на файл с домашней работой](homework-08.ipynb)
 
+<br><br>
+Run jupiter notebook
+```bash
+python3 -m notebook
+```
+
+<br><br>
+
 ### Open Data Analysis (опционально)
 <hr>
 Задание: проанализировать отĸрытый массив данных на свой выбор. Датасеты

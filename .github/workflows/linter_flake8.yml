@@ -19,14 +19,14 @@ jobs:
           python -m pip install --upgrade pip
       - name: Analysing the code with flake8
         run: |
-          cd homework_03
+          cd homework_030
           pip install -r requirements.txt        
 
       - name: Run flake
         run: |
-          cd homework_03
+          cd homework_030
           flake8 --config .flake8
       - name: Run unittest
         run: |
-          cd homework_03
+          cd homework_030
           python -m unittest
