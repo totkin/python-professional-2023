@@ -47,5 +47,10 @@ def grad_check_sparse(f, x, analytic_grad, num_checks):
 
         grad_numerical = (fxph - fxmh) / (2 * h)
         grad_analytic = analytic_grad[ix]
+        # if not abs(grad_numerical) + abs(grad_analytic):
+        #     rel_error = abs(grad_numerical - grad_analytic) / (abs(grad_numerical) + abs(grad_analytic))
+        # else:
+        #     i -= 1
+        #     continue
         rel_error = abs(grad_numerical - grad_analytic) / (abs(grad_numerical) + abs(grad_analytic))
         print(f'numerical: {grad_numerical,} analytic: {grad_analytic}, relative error: {rel_error}')
