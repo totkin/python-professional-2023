@@ -19,6 +19,10 @@ homework_07
 
 ```
 
+Файл с [jupyter notebook](homework.ipynb)
+
+Доработка кода в [gradient_check.py](dmia%2Fgradient_check.py)
+<br><br>
 
 ### Logistic Regression
 <hr>
