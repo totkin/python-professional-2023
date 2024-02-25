@@ -40,7 +40,7 @@ class LogisticRegression:
         self.loss_history = []
         for it in range(num_iters):
             #########################################################################
-            # TODO:                                                                 #
+            #                                                                       #
             # Sample batch_size elements from the training data and their           #
             # corresponding labels to use in this round of gradient descent.        #
             # Store the data in X_batch and their corresponding labels in           #
@@ -64,7 +64,7 @@ class LogisticRegression:
             self.loss_history.append(loss)
             # perform parameter update
             #########################################################################
-            # TODO:                                                                 #
+            #                                                                       #
             # Update the weights using the gradient and the learning rate.          #
             #########################################################################
 
@@ -95,7 +95,7 @@ class LogisticRegression:
         if append_bias:
             X = LogisticRegression.append_biases(X)
         ###########################################################################
-        # TODO:                                                                   #
+        #                                                                         #
         # Implement this method. Store the probabilities of classes in y_proba.   #
         # Hint: It might be helpful to use np.vstack and np.sum                   #
         ###########################################################################
@@ -124,7 +124,7 @@ class LogisticRegression:
         """
 
         ###########################################################################
-        # TODO:                                                                   #
+        #                                                                         #
         # Implement this method. Store the predicted labels in y_pred.            #
         ###########################################################################
 
