@@ -4,4 +4,7 @@
 - [Логистическая регрессия, UFLDL Tutorial](http://ufldl.stanford.edu/tutorial/supervised/LogisticRegression/)
 - [Линейная регрессия, UFLDL Tutorial](http://ufldl.stanford.edu/tutorial/supervised/LinearRegression/)
 <hr>
+
 - github [linear_classifier.py](https://github.com/wendykan/cnn-for-visual-recognition/blob/master/assignment1/cs231n/classifiers/linear_classifier.py)
+- target [github](https://github.com/disugiske/python-otus-logistic-regression/blob/master/homework.ipynb)
+

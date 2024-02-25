@@ -36,13 +36,7 @@ class LogisticRegression:
         # Run stochastic gradient descent to optimize W
         self.loss_history = []
 
-        try: # Python 2
-            xrange
-        except NameError:
-            # Python 3, xrange is now named range
-            xrange = range
-
-        for it in xrange(num_iters):
+        for it in range(num_iters):
             #########################################################################
             # Sample batch_size elements from the training data and their           #
             # corresponding labels to use in this round of gradient descent.        #

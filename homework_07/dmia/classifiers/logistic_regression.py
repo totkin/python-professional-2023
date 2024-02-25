@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import sparse
 
+
 class LogisticRegression:
     def __init__(self):
         self.w = None
@@ -93,7 +94,6 @@ class LogisticRegression:
         proba = self.sigmoid(X.dot(self.w.T))
         y_proba = np.vstack((1 - proba, proba)).T
 
-
         ###########################################################################
         #                           END OF YOUR CODE                              #
         ###########################################################################
@@ -138,22 +138,29 @@ class LogisticRegression:
         loss = 0
         # Compute loss and gradient. Your code should not contain python loops.
 
+        m = X_batch.shape[0]
+        pi = self.sigmoid(X_batch.dot(self.w))
+
+        loss = -np.dot(y_batch, np.log(pi)) - np.dot((1 - y_batch), np.log(1.0 - pi))
+        loss = loss / m
+
+        dw = (1 / m) * (pi - y_batch) * X_batch
 
         # Right now the loss is a sum over all training examples, but we want it
         # to be an average instead so we divide by num_train.
         # Note that the same thing must be done with gradient.
 
-
         # Add regularization to the loss and gradient.
         # Note that you have to exclude bias term in regularization.
 
+        loss += (reg / (2.0 * m)) * np.dot(self.w[:-1], self.w[:-1])
+        dw[:-1] = dw[:-1] + (reg * self.w[:-1]) / m
 
         return loss, dw
 
     @staticmethod
     def append_biases(X):
         return sparse.hstack((X, np.ones(X.shape[0])[:, np.newaxis])).tocsr()
-
 
     def sigmoid(self, x):
         return 1.0 / (1.0 + np.exp(-x))
