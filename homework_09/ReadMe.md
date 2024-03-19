@@ -1,5 +1,5 @@
-## Домашняя работа 08
-*фев'24*
+## Домашняя работа 09
+*мар'24*
 
 <hr>
 
@@ -9,12 +9,12 @@
 homework_09
 ├── AB_NYC_2019.csv            - данные для анализа
 ├── homework-08.ipynb          - файл с домашним заданием
-├── data                       - файл с домашним заданием
+├── data                       - папка с данными
 └── _work                      - Рабочая папка с материалами /оставлена для своих задач автора/
 
 ```
 
-[Ссылка на файл с домашней работой](homework-08.ipynb)
+[Ссылка на файл с домашней работой](memc_load.py)
 
 <br><br>
 Run jupiter notebook
@@ -31,17 +31,28 @@ Run jupiter notebook
 идентифиĸатор устройства через двоеточие, значением являет protobuf
 сообщение.
 
+
+
+
+```bash
+ls -lh data/*.tsv.gz
 ```
-$ ls -lh /Users/s.stupnikov/Coding/otus/*.tsv.gz
--rw-r--r-- 1 s.stupnikov staff 506M 29 сен 12:09 /Users/s.stupnikov/Codin
--rw-r--r-- 1 s.stupnikov staff 506M 29 сен 12:17 /Users/s.stupnikov/Codin
--rw-r--r-- 1 s.stupnikov staff 506M 29 сен 12:25 /Users/s.stupnikov/Codin
+
 ```
+-rw-rw-r-- 1 totkin totkin 507M Mar 17 12:28 data/20170929000000.tsv.gz
+-rw-rw-r-- 1 totkin totkin 507M Mar 17 12:27 data/20170929000100.tsv.gz
+-rw-rw-r-- 1 totkin totkin 507M Mar 17 12:28 data/20170929000200.tsv.gz
+
 ```
-$ gunzip -c /Users/s.stupnikov/Coding/otus/20170929000000.tsv.gz | head -3
-idfa e7e1a50c0ec2747ca56cd9e1558c0d7c 67.7835424444 -22.804400547
-idfa f5ae5fe6122bb20d08ff2c2ec43fb4c4 -104.68583244 -51.24448376
-gaid 3261cf44cbe6a00839c574336fdf49f6 137.790839567 56.8403675248
+
+```bash
+gunzip -c data/20170929000000.tsv.gz | head -3
+```
+
+```
+idfa e7e1a50c0ec2747ca56cd9e1558c0d7c 67.7835424444 -22.804400547 ...
+idfa f5ae5fe6122bb20d08ff2c2ec43fb4c4 -104.68583244 -51.24448376 ...
+gaid 3261cf44cbe6a00839c574336fdf49f6 137.790839567 56.8403675248 ...
 ```
 
 Ссылĸи на tsv.gz файлы:
@@ -50,8 +61,11 @@ gaid 3261cf44cbe6a00839c574336fdf49f6 137.790839567 56.8403675248
 - https://cloud.mail.ru/public/LoDo/SfsPEzoGc
 
 Пример запусĸа
+```bash
+python3 memc_load.py --pattern=/data/*.tsv.gz --dry
 ```
-$ python memc_load.py --pattern=/Users/s.stupnikov/Coding/otus/*.tsv.gz --dry
+
+```
 [2017.09.29 12:39:52] I Memc loader started with options: {'dry': True, 'log'
 [2017.09.29 12:39:52] I Processing /Users/s.stupnikov/Coding/otus/20170929000
 [2017.09.29 12:39:52] D 127.0.0.1:33013 - idfa:e7e1a50c0ec2747ca56cd9e1558c0d

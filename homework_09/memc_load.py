@@ -13,6 +13,7 @@ from optparse import OptionParser
 import appsinstalled_pb2
 # pip install python-memcached
 import memcache
+import concurrent.futures
 
 NORMAL_ERR_RATE = 0.01
 AppsInstalled = collections.namedtuple("AppsInstalled", ["dev_type", "dev_id", "lat", "lon", "apps"])
@@ -63,6 +64,27 @@ def parse_appsinstalled(line):
         logging.info("Invalid geo coords: `%s`" % line)
     return AppsInstalled(dev_type, dev_id, lat, lon, apps)
 
+
+def process_file(file_path):
+    with gzip.open(file_path, 'rt') as f:
+        for line in f:
+            appsinstalled = parse_appsinstalled(line)
+            insert_appsinstalled(memc_addr, appsinstalled)
+
+
+def main(options):
+    memc_addr = options.memcached
+
+    files = options.files
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(process_file, file_path): file_path for file_path in files}
+
+        for future in concurrent.futures.as_completed(futures):
+            file_path = futures[future]
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
 
 def main(options):
     device_memc = {
@@ -128,7 +150,7 @@ if __name__ == '__main__':
     op.add_option("-t", "--test", action="store_true", default=False)
     op.add_option("-l", "--log", action="store", default=None)
     op.add_option("--dry", action="store_true", default=False)
-    op.add_option("--pattern", action="store", default="/data/appsinstalled/*.tsv.gz")
+    op.add_option("--pattern", action="store", default="data/*.tsv.gz")
     op.add_option("--idfa", action="store", default="127.0.0.1:33013")
     op.add_option("--gaid", action="store", default="127.0.0.1:33014")
     op.add_option("--adid", action="store", default="127.0.0.1:33015")
